@@ -40,33 +40,14 @@ class _AdminSessionGate extends StatefulWidget {
 }
 
 class _AdminSessionGateState extends State<_AdminSessionGate> {
-  bool _signingOutNonAdmin = false;
+  String? _handledNonAdminUserId;
   String? _message;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-
-    final auth = context.watch<AuthProvider>();
-    if (auth.isAuthenticated && !auth.isAdmin && !_signingOutNonAdmin) {
-      _signingOutNonAdmin = true;
-      final authProvider = context.read<AuthProvider>();
-      Future.microtask(() async {
-        await authProvider.signOut();
-        if (!mounted) return;
-        setState(() {
-          _message = 'Your saved session is not an admin account.';
-          _signingOutNonAdmin = false;
-        });
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
-    if (auth.isLoading || _signingOutNonAdmin) {
+    if (auth.isLoading) {
       return const Scaffold(
         body: AppLoadingIndicator(message: 'Opening admin workspace...'),
       );
@@ -76,6 +57,32 @@ class _AdminSessionGateState extends State<_AdminSessionGate> {
       return const AdminDashboardScreen();
     }
 
+    if (auth.isAuthenticated && !auth.isAdmin) {
+      _signOutNonAdminSession(context, auth.currentUser?.uid);
+      return const AdminLoginScreen(
+        message: 'This account is not an admin account.',
+      );
+    }
+
     return AdminLoginScreen(message: _message);
+  }
+
+  void _signOutNonAdminSession(BuildContext context, String? userId) {
+    if (_handledNonAdminUserId == userId) {
+      return;
+    }
+
+    _handledNonAdminUserId = userId;
+    final authProvider = context.read<AuthProvider>();
+    Future.microtask(() async {
+      await authProvider.signOut().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {},
+      );
+      if (!mounted) return;
+      setState(() {
+        _message = 'This account is not an admin account.';
+      });
+    });
   }
 }

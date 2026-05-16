@@ -262,7 +262,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Verification email sent to ${_emailController.text.trim()}. Please verify your email, then log in.',
+          'Account created for ${_emailController.text.trim()}. Check your inbox or use Resend verification email from login.',
         ),
       ),
     );

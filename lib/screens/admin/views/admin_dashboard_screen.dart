@@ -9,6 +9,7 @@ import 'package:shop/models/order_model.dart';
 import 'package:shop/providers/admin_provider.dart';
 import 'package:shop/providers/auth_provider.dart';
 import 'package:shop/route/route_constants.dart';
+import 'package:shop/screens/admin/views/admin_login_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -209,129 +210,141 @@ class _DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final padding = isDesktop ? 28.0 : 18.0;
-    final recentOrders = orders.take(5).toList();
-    final statusCards = [
-      _MetricCard(
-        title: 'Delivered revenue',
-        value: 'Rs ${deliveredRevenue.toStringAsFixed(0)}',
-        helper: '$deliveredOrders delivered orders',
-        accent: _DashboardPalette.orange,
-        icon: Icons.payments_outlined,
-      ),
-      _MetricCard(
-        title: 'Open orders',
-        value: '$openOrders',
-        helper: 'Placed, confirmed, or shipped',
-        accent: _DashboardPalette.blue,
-        icon: Icons.local_shipping_outlined,
-      ),
-      _MetricCard(
-        title: 'Catalog',
-        value: '$totalProducts',
-        helper: '$activeProducts active, $featuredProducts featured',
-        accent: _DashboardPalette.green,
-        icon: Icons.inventory_2_outlined,
-      ),
-      _MetricCard(
-        title: 'Store setup',
-        value: '$categoriesCount categories',
-        helper: '$activeBanners live banners',
-        accent: _DashboardPalette.rose,
-        icon: Icons.storefront_outlined,
-      ),
-    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final padding = isDesktop ? 36.0 : 18.0;
+        final contentWidth = constraints.maxWidth - (padding * 2);
+        final useTwoColumnPanels = contentWidth >= 1040;
+        final recentOrders = orders.take(5).toList();
+        final statusCards = [
+          _MetricCard(
+            title: 'Delivered revenue',
+            value: 'Rs ${deliveredRevenue.toStringAsFixed(0)}',
+            helper: '$deliveredOrders delivered orders',
+            accent: _DashboardPalette.orange,
+            icon: Icons.payments_outlined,
+          ),
+          _MetricCard(
+            title: 'Open orders',
+            value: '$openOrders',
+            helper: 'Placed, confirmed, or shipped',
+            accent: _DashboardPalette.blue,
+            icon: Icons.local_shipping_outlined,
+          ),
+          _MetricCard(
+            title: 'Catalog',
+            value: '$totalProducts',
+            helper: '$activeProducts active, $featuredProducts featured',
+            accent: _DashboardPalette.green,
+            icon: Icons.inventory_2_outlined,
+          ),
+          _MetricCard(
+            title: 'Store setup',
+            value: '$categoriesCount',
+            helper: '$categoriesCount categories, $activeBanners live banners',
+            accent: _DashboardPalette.rose,
+            icon: Icons.storefront_outlined,
+          ),
+        ];
 
-    return ListView(
-      padding: EdgeInsets.fromLTRB(padding, padding, padding, 28),
-      children: [
-        _DashboardTopBar(isDesktop: isDesktop),
-        const SizedBox(height: 22),
-        if (!isDesktop) ...[
-          const _DashboardHeadline(),
-          const SizedBox(height: 18),
-        ],
-        _ResponsiveMetricGrid(cards: statusCards, isDesktop: isDesktop),
-        const SizedBox(height: 22),
-        isTablet
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 7,
-                    child: _RevenuePanel(
-                      deliveredRevenue: deliveredRevenue,
-                      outstandingRevenue: outstandingRevenue,
-                      averageDeliveredOrderValue: averageDeliveredOrderValue,
-                    ),
+        return ListView(
+          padding: EdgeInsets.fromLTRB(padding, padding, padding, 28),
+          children: [
+            _DashboardTopBar(isDesktop: isDesktop),
+            const SizedBox(height: 22),
+            if (!isDesktop) ...[
+              const _DashboardHeadline(),
+              const SizedBox(height: 18),
+            ],
+            _ResponsiveMetricGrid(cards: statusCards, isDesktop: isDesktop),
+            const SizedBox(height: 22),
+            useTwoColumnPanels
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 7,
+                        child: _RevenuePanel(
+                          deliveredRevenue: deliveredRevenue,
+                          outstandingRevenue: outstandingRevenue,
+                          averageDeliveredOrderValue:
+                              averageDeliveredOrderValue,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 4,
+                        child: _OrderStatusPanel(
+                          openOrders: openOrders,
+                          deliveredOrders: deliveredOrders,
+                          cancelledOrders: cancelledOrders,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      _RevenuePanel(
+                        deliveredRevenue: deliveredRevenue,
+                        outstandingRevenue: outstandingRevenue,
+                        averageDeliveredOrderValue:
+                            averageDeliveredOrderValue,
+                      ),
+                      const SizedBox(height: 16),
+                      _OrderStatusPanel(
+                        openOrders: openOrders,
+                        deliveredOrders: deliveredOrders,
+                        cancelledOrders: cancelledOrders,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 4,
-                    child: _OrderStatusPanel(
-                      openOrders: openOrders,
-                      deliveredOrders: deliveredOrders,
-                      cancelledOrders: cancelledOrders,
-                    ),
+            const SizedBox(height: 22),
+            useTwoColumnPanels
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 7,
+                        child: _RecentOrdersPanel(orders: recentOrders),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 4,
+                        child: _CategoryBreakdownPanel(
+                          entries: categoryEntries,
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      _RecentOrdersPanel(orders: recentOrders),
+                      const SizedBox(height: 16),
+                      _CategoryBreakdownPanel(entries: categoryEntries),
+                    ],
                   ),
-                ],
-              )
-            : Column(
-                children: [
-                  _RevenuePanel(
-                    deliveredRevenue: deliveredRevenue,
-                    outstandingRevenue: outstandingRevenue,
-                    averageDeliveredOrderValue: averageDeliveredOrderValue,
+            const SizedBox(height: 22),
+            useTwoColumnPanels
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Expanded(child: _QuickActionsPanel()),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _SystemHealthPanel(adminError: adminError),
+                      ),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      const _QuickActionsPanel(),
+                      const SizedBox(height: 16),
+                      _SystemHealthPanel(adminError: adminError),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  _OrderStatusPanel(
-                    openOrders: openOrders,
-                    deliveredOrders: deliveredOrders,
-                    cancelledOrders: cancelledOrders,
-                  ),
-                ],
-              ),
-        const SizedBox(height: 22),
-        isTablet
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 7,
-                    child: _RecentOrdersPanel(orders: recentOrders),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    flex: 4,
-                    child: _CategoryBreakdownPanel(entries: categoryEntries),
-                  ),
-                ],
-              )
-            : Column(
-                children: [
-                  _RecentOrdersPanel(orders: recentOrders),
-                  const SizedBox(height: 16),
-                  _CategoryBreakdownPanel(entries: categoryEntries),
-                ],
-              ),
-        const SizedBox(height: 22),
-        isTablet
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(child: _QuickActionsPanel()),
-                  const SizedBox(width: 16),
-                  Expanded(child: _SystemHealthPanel(adminError: adminError)),
-                ],
-              )
-            : Column(
-                children: [
-                  const _QuickActionsPanel(),
-                  const SizedBox(height: 16),
-                  _SystemHealthPanel(adminError: adminError),
-                ],
-              ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
@@ -386,54 +399,96 @@ class _AdminSidebar extends StatelessWidget {
     ];
 
     return Container(
-      width: 252,
-      color: Theme.of(context).cardColor,
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: _DashboardPalette.orange.withValues(alpha: 0.14),
-                  borderRadius: const BorderRadius.all(Radius.circular(14)),
+      width: 288,
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border(
+          right: BorderSide(color: Theme.of(context).dividerColor),
+        ),
+      ),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF242A34)
+                        : const Color(0xFFFFF7EC),
+                    borderRadius: const BorderRadius.all(Radius.circular(16)),
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.all(Radius.circular(11)),
+                    child: Image.asset(
+                      'assets/logo/petsworld_logo.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
-                child: const Icon(Icons.pets, color: _DashboardPalette.orange),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'PetsWorld',
-                    style: TextStyle(
-                      color: Theme.of(context).textTheme.titleLarge?.color,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: grandisExtendedFont,
-                    ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PetsWorld',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.titleLarge?.color,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w900,
+                          fontFamily: grandisExtendedFont,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Admin workspace',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Admin workspace',
-                    style: TextStyle(
-                      color: Theme.of(context).textTheme.bodySmall?.color,
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 30),
+            const _DashboardHeadline(compact: true),
+            const SizedBox(height: 24),
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: item,
               ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          const _DashboardHeadline(compact: true),
-          const SizedBox(height: 20),
-          ...items.map(
-            (item) =>
-                Padding(padding: const EdgeInsets.only(bottom: 8), child: item),
-          ),
-        ],
+            ),
+            const SizedBox(height: 24),
+            _SidebarItem(
+              icon: Icons.logout_rounded,
+              label: 'Sign out',
+              onTap: () async {
+                final authProvider = context.read<AuthProvider>();
+                final navigator = Navigator.of(context);
+                await authProvider.signOut();
+                navigator.pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => const AdminLoginScreen(),
+                  ),
+                  (route) => false,
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -453,7 +508,7 @@ class _DashboardHeadline extends StatelessWidget {
           'Store control room',
           style: TextStyle(
             color: Theme.of(context).textTheme.headlineSmall?.color,
-            fontSize: compact ? 20 : 28,
+            fontSize: compact ? 22 : 34,
             fontWeight: FontWeight.w800,
             fontFamily: grandisExtendedFont,
           ),
@@ -478,54 +533,7 @@ class _DashboardTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      runSpacing: 12,
-      spacing: 12,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        if (isDesktop) const _DashboardHeadline(),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            Container(
-              constraints: const BoxConstraints(maxWidth: 340),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                borderRadius: const BorderRadius.all(Radius.circular(18)),
-                border: Border.all(color: Theme.of(context).dividerColor),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.search,
-                    color: Theme.of(context).textTheme.bodySmall?.color,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Search orders, products, categories',
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodySmall?.color,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            OutlinedButton.icon(
-              onPressed: () =>
-                  Navigator.pushNamed(context, adminOrdersScreenRoute),
-              icon: const Icon(Icons.receipt_long_outlined),
-              label: const Text('Orders'),
-            ),
-          ],
-        ),
-      ],
-    );
+    return isDesktop ? const _DashboardHeadline() : const SizedBox.shrink();
   }
 }
 
@@ -537,31 +545,33 @@ class _ResponsiveMetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final columns = width < 430
-        ? 1
-        : width >= 1180
-        ? 4
-        : width >= 820
-        ? 2
-        : 2;
-    final childAspectRatio = width < 430
-        ? 1.45
-        : width >= 820
-        ? 1.45
-        : 0.95;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = width >= 1760
+            ? 4
+            : width >= 700
+            ? 2
+            : 1;
+        final cardHeight = columns == 1
+            ? 178.0
+            : columns == 2
+            ? 206.0
+            : 236.0;
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: cards.length,
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        childAspectRatio: isDesktop ? 1.15 : childAspectRatio,
-      ),
-      itemBuilder: (context, index) => cards[index],
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: cards.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            mainAxisExtent: cardHeight,
+          ),
+          itemBuilder: (context, index) => cards[index],
+        );
+      },
     );
   }
 }
@@ -584,10 +594,10 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: const BorderRadius.all(Radius.circular(24)),
+        borderRadius: const BorderRadius.all(Radius.circular(18)),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
@@ -598,13 +608,15 @@ class _MetricCard extends StatelessWidget {
             height: 46,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.14),
-              borderRadius: const BorderRadius.all(Radius.circular(16)),
+              borderRadius: const BorderRadius.all(Radius.circular(12)),
             ),
             child: Icon(icon, color: accent),
           ),
-          const SizedBox(height: 16),
+          const Spacer(),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Theme.of(context).textTheme.titleLarge?.color,
               fontSize: 28,
@@ -615,6 +627,8 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Theme.of(context).textTheme.titleMedium?.color,
               fontSize: 16,
@@ -625,6 +639,8 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             helper,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: Theme.of(context).textTheme.bodySmall?.color,
             ),
@@ -648,6 +664,7 @@ class _RevenuePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final series = [
       deliveredRevenue * 0.46,
       deliveredRevenue * 0.63,
@@ -666,7 +683,15 @@ class _RevenuePanel extends StatelessWidget {
           SizedBox(
             height: 188,
             child: CustomPaint(
-              painter: _RevenueChartPainter(values: series),
+              painter: _RevenueChartPainter(
+                values: series,
+                backgroundColor: isDark
+                    ? const Color(0xFF101720)
+                    : _DashboardPalette.softSurface,
+                gridColor: isDark
+                    ? const Color(0xFF26313F)
+                    : _DashboardPalette.border,
+              ),
               child: const SizedBox.expand(),
             ),
           ),
@@ -711,6 +736,9 @@ class _OrderStatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final titleColor = Theme.of(context).textTheme.titleLarge?.color;
+    final captionColor = Theme.of(context).textTheme.bodySmall?.color;
+
     return _Panel(
       title: 'Order completion',
       subtitle: 'See how many orders are active, delivered, or cancelled',
@@ -731,15 +759,15 @@ class _OrderStatusPanel extends StatelessWidget {
                   children: [
                     Text(
                       '${openOrders + deliveredOrders + cancelledOrders}',
-                      style: const TextStyle(
-                        color: _DashboardPalette.ink,
+                      style: TextStyle(
+                        color: titleColor,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'total orders',
-                      style: TextStyle(color: _DashboardPalette.muted),
+                      style: TextStyle(color: captionColor),
                     ),
                   ],
                 ),
@@ -1097,7 +1125,7 @@ class _Panel extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
-        borderRadius: const BorderRadius.all(Radius.circular(24)),
+        borderRadius: const BorderRadius.all(Radius.circular(18)),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
@@ -1325,17 +1353,23 @@ class _SidebarItem extends StatelessWidget {
 }
 
 class _RevenueChartPainter extends CustomPainter {
-  const _RevenueChartPainter({required this.values});
+  const _RevenueChartPainter({
+    required this.values,
+    required this.backgroundColor,
+    required this.gridColor,
+  });
 
   final List<double> values;
+  final Color backgroundColor;
+  final Color gridColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     final backgroundPaint = Paint()
-      ..color = _DashboardPalette.softSurface
+      ..color = backgroundColor
       ..style = PaintingStyle.fill;
     final gridPaint = Paint()
-      ..color = _DashboardPalette.border
+      ..color = gridColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     final linePaint = Paint()
@@ -1405,7 +1439,9 @@ class _RevenueChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RevenueChartPainter oldDelegate) {
-    return oldDelegate.values != values;
+    return oldDelegate.values != values ||
+        oldDelegate.backgroundColor != backgroundColor ||
+        oldDelegate.gridColor != gridColor;
   }
 }
 
@@ -1484,7 +1520,6 @@ class _OrderStatusRingPainter extends CustomPainter {
 class _DashboardPalette {
   static const softSurface = Color(0xFFFFFBF5);
   static const border = Color(0xFFE9DDCF);
-  static const ink = Color(0xFF231F20);
   static const muted = Color(0xFF7F766D);
   static const orange = Color(0xFFFF8C21);
   static const blue = Color(0xFF4B6BFB);

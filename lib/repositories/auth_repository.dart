@@ -41,6 +41,10 @@ abstract class AuthRepository {
 }
 
 class FirebaseAuthRepository implements AuthRepository {
+  static const Duration _authOperationTimeout = Duration(seconds: 25);
+  static const Duration _profileOperationTimeout = Duration(seconds: 20);
+  static const Duration _secondaryOperationTimeout = Duration(seconds: 10);
+
   static const String _googleServerClientId =
       '119947379250-aj44ibm1mc0823krjoal509mamtgdr3e.apps.googleusercontent.com';
 
@@ -118,26 +122,84 @@ class FirebaseAuthRepository implements AuthRepository {
   }) async {
     _ensureReady();
 
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
+    final trimmedEmail = email.trim();
+    final trimmedName = name.trim();
 
-    final user = credential.user!;
-    await user.updateDisplayName(name.trim());
-    await user.sendEmailVerification();
+    User? createdUser;
+    var shouldSignOut = false;
 
-    final appUser = AppUserModel(
-      uid: user.uid,
-      email: user.email ?? email.trim(),
-      name: name.trim(),
-      role: AppUserRole.user,
-      createdAt: DateTime.now(),
-    );
+    try {
+      final credential = await _auth
+          .createUserWithEmailAndPassword(
+            email: trimmedEmail,
+            password: password,
+          )
+          .timeout(_authOperationTimeout);
 
-    await _db.collection('users').doc(user.uid).set(appUser.toMap());
-    await _auth.signOut();
-    return appUser;
+      final user = credential.user;
+      if (user == null) {
+        throw StateError('Account creation did not return a user session.');
+      }
+
+      createdUser = user;
+      shouldSignOut = true;
+
+      await user.updateDisplayName(trimmedName).timeout(
+        _secondaryOperationTimeout,
+        onTimeout: () {},
+      );
+
+      final appUser = AppUserModel(
+        uid: user.uid,
+        email: user.email ?? trimmedEmail,
+        name: trimmedName,
+        role: AppUserRole.user,
+        createdAt: DateTime.now(),
+      );
+
+      await _db
+          .collection('users')
+          .doc(user.uid)
+          .set(appUser.toMap(), SetOptions(merge: true))
+          .timeout(_profileOperationTimeout);
+
+      try {
+        await user.sendEmailVerification().timeout(
+          _secondaryOperationTimeout,
+        );
+      } catch (error) {
+        debugPrint('Unable to send verification email: $error');
+      }
+
+      return appUser;
+    } on TimeoutException catch (_) {
+      if (createdUser != null) {
+        try {
+          await _db.collection('users').doc(createdUser.uid).set(
+            <String, dynamic>{
+              'uid': createdUser.uid,
+              'email': createdUser.email ?? trimmedEmail,
+              'name': trimmedName,
+              'role': AppUserRole.user.name,
+              'createdAt': DateTime.now().toIso8601String(),
+            },
+            SetOptions(merge: true),
+          ).timeout(_secondaryOperationTimeout);
+        } catch (_) {}
+      }
+      throw StateError(
+        'Signup is taking too long. Please check your connection and try logging in after a moment.',
+      );
+    } finally {
+      if (shouldSignOut) {
+        try {
+          await _auth.signOut().timeout(
+            _secondaryOperationTimeout,
+            onTimeout: () {},
+          );
+        } catch (_) {}
+      }
+    }
   }
 
   @override
