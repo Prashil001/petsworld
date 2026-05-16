@@ -554,7 +554,7 @@ class _ResponsiveMetricGrid extends StatelessWidget {
             ? 2
             : 1;
         final cardHeight = columns == 1
-            ? 178.0
+            ? 190.0
             : columns == 2
             ? 206.0
             : 236.0;
