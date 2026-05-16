@@ -73,7 +73,6 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        cancel_previous_submissions: true
 
   # ─────────────────────────────────────────────────────────────────────────────
   # iOS — Ad-hoc build for device testing (no App Store needed)
