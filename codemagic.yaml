@@ -1,0 +1,129 @@
+workflows:
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # iOS — Release build → TestFlight / App Store
+  # ─────────────────────────────────────────────────────────────────────────────
+  ios-release:
+    name: iOS Release (TestFlight / App Store)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+      # Code signing — Codemagic fetches the certificate + profile automatically
+      # using your App Store Connect API key (set up in Codemagic UI under
+      # Team → Integrations → Developer Portal, or in the app's Code Signing tab).
+      ios_signing:
+        distribution_type: app_store   # use 'ad_hoc' for over-the-air testing
+        bundle_identifier: com.petsworld.shop
+
+      # Environment variable groups — create these in Codemagic UI:
+      #   Team → Global variables & secrets  OR  App → Environment variables
+      #
+      # Group: "firebase_ios"
+      #   GOOGLE_SERVICE_INFO_PLIST  — base64-encoded GoogleService-Info.plist
+      #     How to encode on Windows (PowerShell):
+      #       [Convert]::ToBase64String([IO.File]::ReadAllBytes("GoogleService-Info.plist")) | clip
+      #     How to encode on macOS / Linux:
+      #       base64 -i GoogleService-Info.plist | pbcopy
+      #
+      # Group: "app_store_credentials"  (only needed for auto-publish to TestFlight)
+      #   APP_STORE_CONNECT_KEY_IDENTIFIER   — 10-char key ID  (e.g. ABC1234567)
+      #   APP_STORE_CONNECT_ISSUER_ID        — UUID from App Store Connect
+      #   APP_STORE_CONNECT_PRIVATE_KEY      — contents of the .p8 file
+      groups:
+        - firebase_ios
+        - app_store_credentials
+
+      vars:
+        BUNDLE_ID: "com.petsworld.shop"
+
+    scripts:
+      - name: Decode GoogleService-Info.plist
+        script: |
+          echo $GOOGLE_SERVICE_INFO_PLIST | base64 --decode > ios/Runner/GoogleService-Info.plist
+
+      - name: Flutter pub get
+        script: flutter pub get
+
+      - name: Install CocoaPods dependencies
+        script: find . -name "Podfile" -execdir pod install \;
+        working_directory: ios
+
+      - name: Build iOS IPA
+        script: |
+          flutter build ipa \
+            --release \
+            --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - prashilsuryawanshi@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        cancel_previous_submissions: true
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # iOS — Ad-hoc build for device testing (no App Store needed)
+  # ─────────────────────────────────────────────────────────────────────────────
+  ios-adhoc:
+    name: iOS Ad-hoc (Device Testing)
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+      ios_signing:
+        distribution_type: ad_hoc
+        bundle_identifier: com.petsworld.shop
+
+      groups:
+        - firebase_ios
+
+      vars:
+        BUNDLE_ID: "com.petsworld.shop"
+
+    scripts:
+      - name: Decode GoogleService-Info.plist
+        script: |
+          echo $GOOGLE_SERVICE_INFO_PLIST | base64 --decode > ios/Runner/GoogleService-Info.plist
+
+      - name: Flutter pub get
+        script: flutter pub get
+
+      - name: Install CocoaPods dependencies
+        script: find . -name "Podfile" -execdir pod install \;
+        working_directory: ios
+
+      - name: Build iOS IPA (ad-hoc)
+        script: |
+          flutter build ipa \
+            --release \
+            --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - prashilsuryawanshi@gmail.com
+        notify:
+          success: true
+          failure: true

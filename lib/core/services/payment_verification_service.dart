@@ -37,9 +37,9 @@ class PaymentVerificationService {
     };
 
     try {
-      debugPrint(
-        '[payment-verification] POST $uri payload=${jsonEncode(payload)}',
-      );
+      if (kDebugMode) {
+        debugPrint('[payment-verification] POST $uri');
+      }
 
       final response = await http
           .post(
@@ -51,9 +51,11 @@ class PaymentVerificationService {
 
       final decodedBody = _decodeResponseBody(response.body);
 
-      debugPrint(
-        '[payment-verification] status=${response.statusCode} body=${response.body}',
-      );
+      if (kDebugMode) {
+        debugPrint(
+          '[payment-verification] status=${response.statusCode}',
+        );
+      }
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final backendMessage = _extractBackendMessage(decodedBody);

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -135,41 +134,9 @@ class CloudinaryService {
 
   Future<void> deleteImage(CloudinaryImageRef ref) async {
     if (!canDeleteRemotely) {
-      throw StateError(
-        'Cloudinary delete requires apiKey and apiSecret in '
-        'lib/core/config/cloudinary_config.dart.',
-      );
-    }
-
-    final publicId = (ref.publicId ?? '').trim();
-    if (publicId.isEmpty) {
+      // Deletion is intentionally disabled on the client.
+      // Wire up a Firebase Cloud Function to handle signed Cloudinary deletes.
       return;
-    }
-
-    final timestamp = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final signature = sha1
-        .convert(
-          utf8.encode(
-            'public_id=$publicId&timestamp=$timestamp${CloudinaryConfig.apiSecret}',
-          ),
-        )
-        .toString();
-
-    final uri = Uri.parse(
-      'https://api.cloudinary.com/v1_1/${CloudinaryConfig.cloudName}/image/destroy',
-    );
-    final response = await http.post(
-      uri,
-      body: <String, String>{
-        'public_id': publicId,
-        'timestamp': '$timestamp',
-        'api_key': CloudinaryConfig.apiKey,
-        'signature': signature,
-      },
-    );
-
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw StateError('Cloudinary delete failed for $publicId.');
     }
   }
 

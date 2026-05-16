@@ -168,7 +168,7 @@ class FirebaseAuthRepository implements AuthRepository {
           _secondaryOperationTimeout,
         );
       } catch (error) {
-        debugPrint('Unable to send verification email: $error');
+        if (kDebugMode) debugPrint('Unable to send verification email: $error');
       }
 
       return appUser;
@@ -273,14 +273,16 @@ class FirebaseAuthRepository implements AuthRepository {
         }
       },
       verificationFailed: (FirebaseAuthException exception) {
-        debugPrint(
-          'Phone auth failed [${exception.code}]: ${exception.message}',
-        );
+        if (kDebugMode) {
+          debugPrint(
+            'Phone auth failed [${exception.code}]: ${exception.message}',
+          );
+        }
         if (completer.isCompleted) return;
         completer.completeError(exception);
       },
       codeSent: (String verificationId, int? resendToken) {
-        debugPrint('Phone auth code sent for $phoneNumber');
+        if (kDebugMode) debugPrint('Phone auth code sent');
         if (completer.isCompleted) return;
         completer.complete(
           PhoneAuthRequestResult.codeSent(
@@ -290,7 +292,7 @@ class FirebaseAuthRepository implements AuthRepository {
         );
       },
       codeAutoRetrievalTimeout: (String verificationId) {
-        debugPrint('Phone auth auto retrieval timed out for $phoneNumber');
+        if (kDebugMode) debugPrint('Phone auth auto retrieval timed out');
         if (completer.isCompleted) return;
         completer.complete(
           PhoneAuthRequestResult.codeSent(verificationId: verificationId),

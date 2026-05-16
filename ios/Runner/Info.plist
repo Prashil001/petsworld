@@ -45,11 +45,42 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>LSApplicationQueriesSchemes</key>
+
+	<!-- Privacy usage descriptions — required by App Store review -->
+	<key>NSCameraUsageDescription</key>
+	<string>PetsWorld needs camera access to let you photograph products and update your profile picture.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PetsWorld needs photo library access to let you select images for products and your profile.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>PetsWorld needs permission to save images to your photo library.</string>
+
+	<!-- Google Sign-In: reversed iOS client ID from GoogleService-Info.plist -->
+	<key>CFBundleURLTypes</key>
 	<array>
-	<string>http</string>
-	<string>https</string>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Google Sign-In</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.119947379250-1bisfc4st0srheld5qnav2m50tpbafai</string>
+			</array>
+		</dict>
 	</array>
 
+	<!-- URL schemes this app is allowed to query (required for canOpenURL) -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>http</string>
+		<string>https</string>
+		<!-- Razorpay UPI payment apps -->
+		<string>upi</string>
+		<string>phonepe</string>
+		<string>paytmmp</string>
+		<string>gpay</string>
+		<string>bhim</string>
+		<string>credpay</string>
+	</array>
 </dict>
 </plist>
