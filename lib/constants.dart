@@ -53,6 +53,16 @@ const Color successColor = Color(0xFF2ED573);
 const Color warningColor = Color(0xFFFFBE21);
 const Color errorColor = Color(0xFFEA5B5B);
 
+// ── Brand system ─────────────────────────────────────────────────────────────
+// Purple is the single primary (buttons, prices, links, active states).
+// Orange is the ACCENT, reserved ONLY for deals/sale highlights.
+const Color accentColor = Color(0xFFE0953D); // deals/sale only
+const Color priceColor = primaryColor; // product prices share the primary
+
+// Sale/deal badge tokens (orange family) — keep these consistent everywhere.
+const Color dealBadgeBg = Color(0xFFFFE7D6);
+const Color dealBadgeText = Color(0xFFC9542B);
+
 const double defaultPadding = 16.0;
 const double defaultBorderRadious = 12.0;
 const Duration defaultDuration = Duration(milliseconds: 300);

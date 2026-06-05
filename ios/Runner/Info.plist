@@ -46,6 +46,10 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 
+	<!-- Export compliance: app uses only standard HTTPS/crypto (exempt) -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
 	<!-- Privacy usage descriptions — required by App Store review -->
 	<key>NSCameraUsageDescription</key>
 	<string>PetsWorld needs camera access to let you photograph products and update your profile picture.</string>

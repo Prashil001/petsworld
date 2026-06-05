@@ -11,9 +11,18 @@ class Categories extends StatelessWidget {
     super.key,
   });
 
+  // Normalized ids/titles that represent pet types for the "Shop by pet" row.
+  static const _petTypes = {'dogs', 'cats', 'dog', 'cat'};
+
   @override
   Widget build(BuildContext context) {
-    final categories = context.watch<ProductProvider>().discoverCategories;
+    final categories = context
+        .watch<ProductProvider>()
+        .discoverCategories
+        .where((c) =>
+            _petTypes.contains(c.title.toLowerCase().trim()) ||
+            _petTypes.contains(c.id.toLowerCase().trim()))
+        .toList();
 
     if (categories.isEmpty) {
       return const SizedBox.shrink();

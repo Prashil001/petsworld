@@ -114,7 +114,7 @@ class _EntryPointState extends State<EntryPoint> {
                     backgroundColor: isDark
                         ? const Color(0xFF1F2328)
                         : Colors.white,
-                    indicatorColor: const Color(0xFFF0A500),
+                    indicatorColor: primaryColor,
                     iconTheme: WidgetStateProperty.resolveWith((states) {
                       final selected = states.contains(WidgetState.selected);
                       return IconThemeData(
@@ -127,7 +127,7 @@ class _EntryPointState extends State<EntryPoint> {
                       final selected = states.contains(WidgetState.selected);
                       return TextStyle(
                         color: selected
-                            ? (isDark ? Colors.white : const Color(0xFF1F2328))
+                            ? primaryColor
                             : (isDark ? Colors.white70 : Colors.black54),
                         fontSize: 12,
                         fontFamily: null,

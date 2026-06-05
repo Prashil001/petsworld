@@ -441,11 +441,11 @@ class _ProfileHeader extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: const Color(0xFFEDEFFF),
+                  backgroundColor: primaryColor.withValues(alpha: 0.12),
                   child: Text(
                     initials,
                     style: const TextStyle(
-                      color: Color(0xFF4B57D9),
+                      color: primaryColor,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -475,13 +475,13 @@ class _ProfileHeader extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFE8EBFF),
+                                color: primaryColor.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: const Text(
                                 'ADMIN',
                                 style: TextStyle(
-                                  color: Color(0xFF4651D2),
+                                  color: primaryColor,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),

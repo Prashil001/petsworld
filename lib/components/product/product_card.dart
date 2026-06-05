@@ -115,7 +115,7 @@ class ProductCard extends StatelessWidget {
                                 vertical: 5,
                               ),
                               decoration: const BoxDecoration(
-                                color: Color(0xFFFFE1D8),
+                                color: dealBadgeBg,
                                 borderRadius: BorderRadius.all(
                                   Radius.circular(999),
                                 ),
@@ -123,7 +123,7 @@ class ProductCard extends StatelessWidget {
                               child: Text(
                                 "$dicountpercent% OFF",
                                 style: const TextStyle(
-                                  color: Color(0xFFC44C22),
+                                  color: dealBadgeText,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -164,7 +164,7 @@ class ProductCard extends StatelessWidget {
                           Text(
                             "Rs ${priceAfetDiscount!.toStringAsFixed(0)}",
                             style: const TextStyle(
-                              color: Color(0xFF18A4D6),
+                              color: priceColor,
                               fontWeight: FontWeight.w800,
                               fontSize: 15,
                             ),
@@ -186,7 +186,7 @@ class ProductCard extends StatelessWidget {
                     : Text(
                         "Rs ${price.toStringAsFixed(0)}",
                         style: const TextStyle(
-                          color: Color(0xFF18A4D6),
+                          color: priceColor,
                           fontWeight: FontWeight.w800,
                           fontSize: 15,
                         ),

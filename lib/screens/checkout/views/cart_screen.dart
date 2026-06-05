@@ -14,6 +14,7 @@ class CartScreen extends StatelessWidget {
     final cartProvider = context.watch<CartProvider>();
     final items = cartProvider.items;
     final pricing = cartProvider.pricing;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(title: Text('Cart (${cartProvider.totalItems})')),
@@ -80,12 +81,22 @@ class CartScreen extends StatelessWidget {
                       return Container(
                         padding: const EdgeInsets.all(defaultPadding),
                         decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
                           border: Border.all(
                             color: Theme.of(context).dividerColor,
                           ),
                           borderRadius: const BorderRadius.all(
-                            Radius.circular(defaultBorderRadious),
+                            Radius.circular(18),
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(
+                                alpha: isDark ? 0.12 : 0.05,
+                              ),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,8 +141,8 @@ class CartScreen extends StatelessWidget {
                                   Text(
                                     'Rs ${item.unitPrice.toStringAsFixed(0)}',
                                     style: const TextStyle(
-                                      color: Color(0xFF31B0D8),
-                                      fontWeight: FontWeight.w600,
+                                      color: priceColor,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                   const SizedBox(height: defaultPadding / 2),

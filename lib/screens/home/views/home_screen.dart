@@ -43,7 +43,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final productProvider = context.watch<ProductProvider>();
-    final categories = productProvider.discoverCategories;
+    final allCategories = productProvider.discoverCategories;
+    const petTypeIds = {'dogs', 'cats', 'dog', 'cat'};
+    final categories = allCategories.where((c) {
+      final t = c.title.toLowerCase().trim();
+      final id = c.id.toLowerCase().trim();
+      return petTypeIds.contains(t) || petTypeIds.contains(id);
+    }).toList();
     final flashSaleProducts = productProvider.flashSaleProducts;
     final bestSellers = productProvider.popularProducts;
     final newArrivals = productProvider.newArrivals;
@@ -51,15 +57,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final banners = productProvider.homeBanners;
     final homeSections = productProvider.homeSections;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isInitialLoading =
-        productProvider.isLoading &&
-        categories.isEmpty &&
+    final everythingEmpty =
+        allCategories.isEmpty &&
         flashSaleProducts.isEmpty &&
         bestSellers.isEmpty &&
         newArrivals.isEmpty &&
         allProducts.isEmpty &&
         banners.isEmpty &&
         homeSections.isEmpty;
+    // Show loader when Firebase is actively loading OR before loadInitialData()
+    // has been called (isLoading=false but no data yet).
+    final isInitialLoading = productProvider.isLoading || everythingEmpty;
 
     _syncBannerAutoplay(banners.length);
 
@@ -138,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: section.title,
                   leading: const Icon(
                     Icons.local_offer_outlined,
-                    color: Color(0xFFE0953D),
+                    color: accentColor,
                     size: 18,
                   ),
                   badge: section.hasSectionDiscount
@@ -147,8 +155,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? 'SAVE Rs ${section.sectionDiscountValue?.toStringAsFixed(0) ?? '0'}'
                             : '${section.sectionDiscountValue?.toStringAsFixed(0) ?? '0'}% OFF'
                       : null,
-                  badgeColor: const Color(0xFFFFF0D9),
-                  badgeTextColor: const Color(0xFFC66A0A),
+                  badgeColor: dealBadgeBg,
+                  badgeTextColor: dealBadgeText,
                   actionText: 'Shop all',
                   products: productProvider.productsForHomeSection(section),
                   onTapAction: () => _openDiscover(context),
@@ -183,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             'See all',
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
-                                  color: const Color(0xFFE0953D),
+                                  color: primaryColor,
                                   fontWeight: FontWeight.w700,
                                 ),
                           ),
@@ -218,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'New arrivals',
                 leading: const Icon(
                   Icons.auto_awesome_rounded,
-                  color: Color(0xFFE59D45),
+                  color: primaryColor,
                   size: 18,
                 ),
                 actionText: 'See all',
@@ -234,12 +242,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'Deals of the week',
                 leading: const Icon(
                   Icons.local_fire_department_rounded,
-                  color: Color(0xFFE36F47),
+                  color: accentColor,
                   size: 18,
                 ),
                 badge: 'HOT',
-                badgeColor: const Color(0xFFFFE3D6),
-                badgeTextColor: const Color(0xFFC9542B),
+                badgeColor: dealBadgeBg,
+                badgeTextColor: dealBadgeText,
                 actionText: 'View deals',
                 products: flashSaleProducts,
                 onTapAction: () => _openDiscover(context),
@@ -253,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'Best sellers',
                 leading: const Icon(
                   Icons.workspace_premium_rounded,
-                  color: Color(0xFF3C7A67),
+                  color: primaryColor,
                   size: 18,
                 ),
                 actionText: 'Shop now',
@@ -280,25 +288,26 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: const BorderRadius.all(
-                        Radius.circular(999),
+                  if (!productProvider.isLoading)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
                       ),
-                      border: Border.all(color: Theme.of(context).dividerColor),
-                    ),
-                    child: Text(
-                      '${allProducts.length} items',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).cardColor,
+                        borderRadius: const BorderRadius.all(
+                          Radius.circular(999),
+                        ),
+                        border: Border.all(color: Theme.of(context).dividerColor),
+                      ),
+                      child: Text(
+                        '${allProducts.length}${productProvider.hasMoreProducts ? '+' : ''} items',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -376,7 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed: () => _openDiscover(context),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: const Color(0xFFE0953D),
+                            backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -641,7 +650,7 @@ class _BannerCarousel extends StatelessWidget {
                 height: 6,
                 decoration: BoxDecoration(
                   color: currentIndex == index
-                      ? const Color(0xFFE0953D)
+                      ? primaryColor
                       : Theme.of(context).dividerColor.withValues(alpha: 0.6),
                   borderRadius: const BorderRadius.all(Radius.circular(999)),
                 ),
@@ -823,7 +832,7 @@ class _ProductRailSection extends StatelessWidget {
                   child: Text(
                     actionText,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFFE0953D),
+                      color: primaryColor,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

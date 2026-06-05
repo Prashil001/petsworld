@@ -24,23 +24,31 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
+  TabController? _tabController;
+  ProductProvider? _provider;
+  int _lastTabCount = 0;
   String _searchQuery = '';
   int _currentTabIndex = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this)
-      ..addListener(_handleTabChange);
-    _syncInitialSelection();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final newProvider = context.read<ProductProvider>();
+    if (!identical(_provider, newProvider)) {
+      _provider?.removeListener(_onCategoriesChanged);
+      _provider = newProvider;
+      _provider!.addListener(_onCategoriesChanged);
+      // First-time init — no setState needed, build follows didChangeDependencies.
+      _initTabController(_provider!.discoverCategories);
+      _syncInitialSelection(_provider!.discoverCategories);
+    }
   }
 
   @override
   void dispose() {
-    _tabController
-      ..removeListener(_handleTabChange)
-      ..dispose();
+    _provider?.removeListener(_onCategoriesChanged);
+    _tabController?.removeListener(_handleTabChange);
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -49,46 +57,85 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.filterSeed != widget.filterSeed ||
         oldWidget.initialCategoryTitle != widget.initialCategoryTitle) {
-      setState(() {
-        _searchQuery = '';
-      });
-      _syncInitialSelection();
+      setState(() => _searchQuery = '');
+      _syncInitialSelection(_provider?.discoverCategories ?? const []);
     }
+  }
+
+  /// Called by the provider whenever categories change (e.g. after Firebase loads).
+  void _onCategoriesChanged() {
+    if (!mounted) return;
+    final categories = _provider!.discoverCategories;
+    final count = categories.isEmpty ? 1 : categories.length;
+    if (_lastTabCount == count) return;
+    setState(() => _initTabController(categories));
+  }
+
+  void _initTabController(List<CategoryModel> categories) {
+    final count = categories.isEmpty ? 1 : categories.length;
+    if (_tabController != null && _lastTabCount == count) return;
+    final prevIndex = _tabController?.index ?? 0;
+    _tabController?.removeListener(_handleTabChange);
+    _tabController?.dispose();
+    _lastTabCount = count;
+    _currentTabIndex = prevIndex.clamp(0, count - 1);
+    _tabController = TabController(
+      length: count,
+      vsync: this,
+      initialIndex: _currentTabIndex,
+    )..addListener(_handleTabChange);
   }
 
   void _handleTabChange() {
-    if (_tabController.indexIsChanging ||
-        _currentTabIndex == _tabController.index) {
+    final controller = _tabController;
+    if (controller == null) return;
+    if (controller.indexIsChanging || _currentTabIndex == controller.index) {
       return;
     }
-
     setState(() {
-      _currentTabIndex = _tabController.index;
+      _currentTabIndex = controller.index;
     });
   }
 
-  void _syncInitialSelection() {
-    final normalized = widget.initialCategoryTitle?.trim().toLowerCase();
-    final belongsToCats =
-        normalized != null &&
-        _petTypeForCategory(
-              context.read<ProductProvider>().discoverCategories,
-              normalized,
-            ) ==
-            'cats';
-    final targetIndex = belongsToCats ? 1 : 0;
+  void _syncInitialSelection(List<CategoryModel> categories) {
+    final title = widget.initialCategoryTitle?.trim().toLowerCase();
+    if (title == null || title.isEmpty || categories.isEmpty) return;
+
+    int targetIndex = 0;
+    outer:
+    for (int i = 0; i < categories.length; i++) {
+      final cat = categories[i];
+      if (_normalizedCategoryKey(cat.title) == title ||
+          _normalizedCategoryKey(cat.id) == title) {
+        targetIndex = i;
+        break;
+      }
+      for (final sub in cat.subCategories) {
+        if (_normalizedCategoryKey(sub.title) == title ||
+            _normalizedCategoryKey(sub.id) == title) {
+          targetIndex = i;
+          break outer;
+        }
+      }
+    }
 
     _currentTabIndex = targetIndex;
-    if (_tabController.index != targetIndex) {
-      _tabController.index = targetIndex;
+    final controller = _tabController;
+    if (controller != null && controller.index != targetIndex) {
+      controller.index = targetIndex;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final productProvider = context.watch<ProductProvider>();
+    final topLevelCategories =
+        context.watch<ProductProvider>().discoverCategories;
+
+    final controller = _tabController;
+    if (controller == null) return const SizedBox.shrink();
+
     final tabSections = _filterSectionsForQuery(
-      _sectionsForTab(productProvider.discoverCategories, _currentTabIndex),
+      _sectionsForTab(topLevelCategories, _currentTabIndex),
       _searchQuery,
     );
     final hasQuery = _searchQuery.trim().isNotEmpty;
@@ -145,7 +192,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                       border: Border.all(color: Theme.of(context).dividerColor),
                     ),
                     child: TabBar(
-                      controller: _tabController,
+                      controller: controller,
                       dividerColor: Colors.transparent,
                       indicator: BoxDecoration(
                         color: primaryColor,
@@ -166,10 +213,15 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
-                      tabs: const <Tab>[
-                        Tab(text: 'Dogs'),
-                        Tab(text: 'Cats'),
-                      ],
+                      isScrollable: topLevelCategories.length > 3,
+                      tabAlignment: topLevelCategories.length > 3
+                          ? TabAlignment.start
+                          : TabAlignment.fill,
+                      tabs: topLevelCategories.isEmpty
+                          ? const [Tab(text: 'All')]
+                          : topLevelCategories
+                              .map((c) => Tab(text: c.title))
+                              .toList(),
                     ),
                   ),
                 ),
@@ -177,7 +229,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
             ),
             ..._buildCategorySections(
               context,
-              productProvider.discoverCategories,
+              topLevelCategories,
               tabSections,
               categoryCrossAxisCount,
               categoryTileSize,
@@ -221,9 +273,10 @@ class _DiscoverScreenState extends State<DiscoverScreen>
               Text(
                 hasQuery
                     ? 'Search results'
-                    : _currentTabIndex == 0
-                    ? 'For dogs'
-                    : 'For cats',
+                    : categories.isNotEmpty &&
+                          _currentTabIndex < categories.length
+                    ? 'For ${categories[_currentTabIndex].title.toLowerCase()}'
+                    : '',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w700,
                   color: primaryColor,
@@ -319,10 +372,15 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     List<CategoryModel> categories,
     int tabIndex,
   ) {
-    final petType = tabIndex == 0 ? 'dogs' : 'cats';
-    final parent = _petParentCategory(categories, petType);
-    if (parent == null) {
+    if (categories.isEmpty || tabIndex >= categories.length) {
       return const <_PetSection>[];
+    }
+
+    final parent = categories[tabIndex];
+
+    // If this top-level category has no children, surface it directly.
+    if (parent.subCategories.isEmpty) {
+      return [_PetSection(title: parent.title, categories: [parent])];
     }
 
     final lifestyle = <CategoryModel>[];
@@ -377,46 +435,6 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       }
     }
     return filtered;
-  }
-
-  CategoryModel? _petParentCategory(
-    List<CategoryModel> categories,
-    String petType,
-  ) {
-    final normalizedPet = _normalizedCategoryKey(petType);
-    for (final category in categories) {
-      final normalizedTitle = _normalizedCategoryKey(category.title);
-      final normalizedId = _normalizedCategoryKey(category.id);
-      if (normalizedTitle == normalizedPet ||
-          normalizedTitle == normalizedPet.replaceAll('s', '') ||
-          normalizedId == normalizedPet ||
-          normalizedId == normalizedPet.replaceAll('s', '')) {
-        return category;
-      }
-    }
-    return null;
-  }
-
-  String? _petTypeForCategory(List<CategoryModel> categories, String label) {
-    final normalized = _normalizedCategoryKey(label);
-    for (final parent in categories) {
-      final parentKey = _normalizedCategoryKey(parent.title);
-      if (parentKey == 'dogs' || parentKey == 'cats') {
-        if (parentKey == normalized ||
-            parentKey.replaceAll('s', '') == normalized) {
-          return parentKey;
-        }
-        final hasMatch = parent.subCategories.any(
-          (category) =>
-              _normalizedCategoryKey(category.title) == normalized ||
-              _normalizedCategoryKey(category.id) == normalized,
-        );
-        if (hasMatch) {
-          return parentKey;
-        }
-      }
-    }
-    return null;
   }
 
   bool _isFoodCategory(String normalizedTitle) {

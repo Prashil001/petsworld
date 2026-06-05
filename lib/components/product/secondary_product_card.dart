@@ -125,8 +125,8 @@ class SecondaryProductCard extends StatelessWidget {
                             Text(
                               "Rs ${priceAfetDiscount!.toStringAsFixed(0)}",
                               style: const TextStyle(
-                                color: Color(0xFF31B0D8),
-                                fontWeight: FontWeight.w500,
+                                color: priceColor,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 12,
                               ),
                             ),
@@ -147,8 +147,8 @@ class SecondaryProductCard extends StatelessWidget {
                       : Text(
                           "Rs ${price.toStringAsFixed(0)}",
                           style: const TextStyle(
-                            color: Color(0xFF31B0D8),
-                            fontWeight: FontWeight.w500,
+                            color: priceColor,
+                            fontWeight: FontWeight.w700,
                             fontSize: 12,
                           ),
                         ),

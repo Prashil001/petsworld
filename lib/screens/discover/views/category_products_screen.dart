@@ -170,7 +170,7 @@ class _CategoryProductsScreenState extends State<CategoryProductsScreen> {
                               : () => productProvider.loadMoreProducts(),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: const Color(0xFFE0953D),
+                            backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

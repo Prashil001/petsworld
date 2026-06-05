@@ -44,20 +44,23 @@ workflows:
     scripts:
       - name: Decode GoogleService-Info.plist
         script: |
-          echo $GOOGLE_SERVICE_INFO_PLIST | base64 --decode > ios/Runner/GoogleService-Info.plist
+          echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist"
 
       - name: Flutter pub get
         script: flutter pub get
 
       - name: Install CocoaPods dependencies
-        script: find . -name "Podfile" -execdir pod install \;
+        script: pod install
         working_directory: ios
+
+      - name: Set up code signing (fetch profiles + export options)
+        script: xcode-project use-profiles
 
       - name: Build iOS IPA
         script: |
           flutter build ipa \
             --release \
-            --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
+            --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -100,20 +103,23 @@ workflows:
     scripts:
       - name: Decode GoogleService-Info.plist
         script: |
-          echo $GOOGLE_SERVICE_INFO_PLIST | base64 --decode > ios/Runner/GoogleService-Info.plist
+          echo "$GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > "$CM_BUILD_DIR/ios/Runner/GoogleService-Info.plist"
 
       - name: Flutter pub get
         script: flutter pub get
 
       - name: Install CocoaPods dependencies
-        script: find . -name "Podfile" -execdir pod install \;
+        script: pod install
         working_directory: ios
+
+      - name: Set up code signing (fetch profiles + export options)
+        script: xcode-project use-profiles
 
       - name: Build iOS IPA (ad-hoc)
         script: |
           flutter build ipa \
             --release \
-            --export-options-plist=$CM_BUILD_DIR/ios/ExportOptions.plist
+            --export-options-plist=/Users/builder/export_options.plist
 
     artifacts:
       - build/ios/ipa/*.ipa
