@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+import 'package:shop/models/order_item_model.dart';
 import 'package:shop/models/order_model.dart';
 import 'package:shop/models/product_model.dart';
 import 'package:shop/models/product_option_model.dart';
@@ -44,6 +45,10 @@ class FirestoreOrderRepository implements OrderRepository {
     if (order.createdAt == null) {
       payload['createdAt'] = FieldValue.serverTimestamp();
     }
+    // The transaction below decrements stock for each item, so mark the
+    // order as decremented. Cancel flows read this flag to know whether
+    // to restore stock.
+    payload['stockDecremented'] = true;
 
     await _db.runTransaction((transaction) async {
       for (final item in normalizedOrder.items) {
@@ -204,10 +209,22 @@ class FirestoreOrderRepository implements OrderRepository {
         throw StateError('Delivered or cancelled orders cannot be changed.');
       }
 
-      transaction.update(docRef, <String, dynamic>{
+      final updates = <String, dynamic>{
         'orderStatus': status.name,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // If admin moves the order to cancelled, restore the reserved stock
+      // in the same transaction so other shoppers can buy those units.
+      if (status == OrderStatus.cancelled && current.stockDecremented) {
+        await _restoreStockForItems(
+          transaction: transaction,
+          items: current.items,
+        );
+        updates['stockDecremented'] = false;
+      }
+
+      transaction.update(docRef, updates);
     });
   }
 
@@ -233,11 +250,89 @@ class FirestoreOrderRepository implements OrderRepository {
         throw StateError('This order can no longer be cancelled.');
       }
 
-      transaction.update(docRef, <String, dynamic>{
+      final updates = <String, dynamic>{
         'orderStatus': OrderStatus.cancelled.name,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+
+      // Restore reserved stock in the same transaction.
+      if (order.stockDecremented) {
+        await _restoreStockForItems(
+          transaction: transaction,
+          items: order.items,
+        );
+        updates['stockDecremented'] = false;
+      }
+
+      transaction.update(docRef, updates);
     });
+  }
+
+  /// Restores stock for each order item inside the given Firestore [transaction].
+  /// Groups items by product so multiple cart lines for the same product
+  /// produce a single write. Reads every product first (Firestore requires
+  /// all reads before any writes in a transaction), then applies updates.
+  ///
+  /// - Products that no longer exist are skipped silently.
+  /// - Packs that no longer exist fall back to incrementing the top-level
+  ///   stock so units aren't lost.
+  Future<void> _restoreStockForItems({
+    required Transaction transaction,
+    required List<OrderItemModel> items,
+  }) async {
+    // Group items by productId (handles multi-pack purchases of the same product).
+    final byProduct = <String, List<OrderItemModel>>{};
+    for (final item in items) {
+      final id = item.productId.trim();
+      if (id.isEmpty || item.quantity <= 0) continue;
+      (byProduct[id] ??= <OrderItemModel>[]).add(item);
+    }
+    if (byProduct.isEmpty) return;
+
+    // Phase 1 — read every affected product and compute the full update payload.
+    final pendingUpdates = <DocumentReference, Map<String, dynamic>>{};
+    for (final entry in byProduct.entries) {
+      final productRef = _db.collection('products').doc(entry.key);
+      final snapshot = await transaction.get(productRef);
+      if (!snapshot.exists) continue;
+
+      final product = ProductModel.fromMap(
+        snapshot.id,
+        snapshot.data() ?? <String, dynamic>{},
+      );
+
+      if (product.packOptions.isNotEmpty) {
+        final updatedPacks = product.packOptions.toList();
+        var fallbackStockBump = 0;
+        for (final item in entry.value) {
+          final idx = updatedPacks.indexWhere(
+            (p) => p.id == item.selectedOptionId,
+          );
+          if (idx == -1) {
+            fallbackStockBump += item.quantity;
+          } else {
+            updatedPacks[idx] = updatedPacks[idx].copyWith(
+              stockQuantity: updatedPacks[idx].stockQuantity + item.quantity,
+            );
+          }
+        }
+        pendingUpdates[productRef] = <String, dynamic>{
+          'packOptions': updatedPacks.map((p) => p.toMap()).toList(),
+          'stockQuantity':
+              _updatedProductPrimaryStock(updatedPacks) + fallbackStockBump,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+      } else {
+        final totalQty = entry.value.fold<int>(0, (s, i) => s + i.quantity);
+        pendingUpdates[productRef] = <String, dynamic>{
+          'stockQuantity': product.stockQuantity + totalQty,
+          'updatedAt': FieldValue.serverTimestamp(),
+        };
+      }
+    }
+
+    // Phase 2 — apply all writes (after every read has completed).
+    pendingUpdates.forEach((ref, data) => transaction.update(ref, data));
   }
 
   void _ensureReady() {

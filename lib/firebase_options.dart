@@ -65,12 +65,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAOgQrrTafHHsbb_17nc3dBkQZH_fR3dT0',
-    appId: '1:119947379250:ios:6e48339ab9fb7ab8a7722b',
+    appId: '1:119947379250:ios:c3a6a153f9f0e15da7722b',
     messagingSenderId: '119947379250',
     projectId: 'pet-shop-app-ee6f2',
     storageBucket: 'pet-shop-app-ee6f2.firebasestorage.app',
     iosClientId:
-        '119947379250-1bisfc4st0srheld5qnav2m50tpbafai.apps.googleusercontent.com',
+        '119947379250-utlm8hm9qne295306qfcm61tb2b0pqe7.apps.googleusercontent.com',
     iosBundleId: 'com.petsworld.shop',
   );
 }

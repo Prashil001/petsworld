@@ -22,6 +22,7 @@ class OrderModel {
     required this.pricing,
     required this.payment,
     this.orderStatus = OrderStatus.placed,
+    this.stockDecremented = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -36,6 +37,11 @@ class OrderModel {
   final OrderPricingModel pricing;
   final OrderPaymentModel payment;
   final OrderStatus orderStatus;
+
+  /// True after the stock for this order's items has been reserved
+  /// (decremented). Used by cancel flows to know whether to restore.
+  final bool stockDecremented;
+
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -69,6 +75,7 @@ class OrderModel {
     OrderPricingModel? pricing,
     OrderPaymentModel? payment,
     OrderStatus? orderStatus,
+    bool? stockDecremented,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -83,6 +90,7 @@ class OrderModel {
       pricing: pricing ?? this.pricing,
       payment: payment ?? this.payment,
       orderStatus: orderStatus ?? this.orderStatus,
+      stockDecremented: stockDecremented ?? this.stockDecremented,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -142,6 +150,7 @@ class OrderModel {
               ),
             ),
       orderStatus: _orderStatusFromString(data['orderStatus'] as String?),
+      stockDecremented: data['stockDecremented'] as bool? ?? false,
       createdAt: _parseDate(data['createdAt']),
       updatedAt: _parseDate(data['updatedAt']),
     );
@@ -159,6 +168,7 @@ class OrderModel {
       'pricing': pricing.toMap(),
       'payment': payment.toMap(),
       'orderStatus': orderStatus.name,
+      'stockDecremented': stockDecremented,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'customerName': userName,
