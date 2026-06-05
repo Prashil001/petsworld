@@ -32,6 +32,13 @@
 
 # Web related
 
+# Signing / secrets — never commit these to source control.
+*.jks
+*.keystore
+**/key.properties
+android/key.properties
+upload-keystore.jks
+
 # Symbolication related
 app.*.symbols
 
