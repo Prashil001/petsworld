@@ -65,14 +65,15 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   /// Called by the provider whenever categories change (e.g. after Firebase loads).
   void _onCategoriesChanged() {
     if (!mounted) return;
-    final categories = _provider!.discoverCategories;
-    final count = categories.isEmpty ? 1 : categories.length;
+    final tabs = _buildDisplayedTabs(_provider!.discoverCategories);
+    final count = tabs.isEmpty ? 1 : tabs.length;
     if (_lastTabCount == count) return;
-    setState(() => _initTabController(categories));
+    setState(() => _initTabController(_provider!.discoverCategories));
   }
 
   void _initTabController(List<CategoryModel> categories) {
-    final count = categories.isEmpty ? 1 : categories.length;
+    final tabs = _buildDisplayedTabs(categories);
+    final count = tabs.isEmpty ? 1 : tabs.length;
     if (_tabController != null && _lastTabCount == count) return;
     final prevIndex = _tabController?.index ?? 0;
     _tabController?.removeListener(_handleTabChange);
@@ -84,6 +85,43 @@ class _DiscoverScreenState extends State<DiscoverScreen>
       vsync: this,
       initialIndex: _currentTabIndex,
     )..addListener(_handleTabChange);
+  }
+
+  /// Builds the visible top-tab list:
+  /// - Dogs (single category) if a "Dogs"/"Dog" parent exists
+  /// - Cats (single category) if a "Cats"/"Cat" parent exists
+  /// - Others (bucket of all remaining parentless categories)
+  List<_DiscoverTab> _buildDisplayedTabs(List<CategoryModel> topLevel) {
+    if (topLevel.isEmpty) return const <_DiscoverTab>[];
+
+    bool isPet(CategoryModel c, Set<String> keys) {
+      final t = _normalizedCategoryKey(c.title);
+      final id = _normalizedCategoryKey(c.id);
+      return keys.contains(t) || keys.contains(id);
+    }
+
+    const dogKeys = {'dog', 'dogs'};
+    const catKeys = {'cat', 'cats'};
+
+    CategoryModel? findFirst(Set<String> keys) {
+      for (final c in topLevel) {
+        if (isPet(c, keys)) return c;
+      }
+      return null;
+    }
+
+    final dogs = findFirst(dogKeys);
+    final cats = findFirst(catKeys);
+    final others = topLevel
+        .where((c) => !isPet(c, dogKeys) && !isPet(c, catKeys))
+        .toList();
+
+    return [
+      if (dogs != null) _DiscoverTab(title: 'Dogs', categories: [dogs]),
+      if (cats != null) _DiscoverTab(title: 'Cats', categories: [cats]),
+      if (others.isNotEmpty)
+        _DiscoverTab(title: 'Others', categories: others, isOthers: true),
+    ];
   }
 
   void _handleTabChange() {
@@ -101,20 +139,24 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     final title = widget.initialCategoryTitle?.trim().toLowerCase();
     if (title == null || title.isEmpty || categories.isEmpty) return;
 
+    final tabs = _buildDisplayedTabs(categories);
+    if (tabs.isEmpty) return;
+
     int targetIndex = 0;
     outer:
-    for (int i = 0; i < categories.length; i++) {
-      final cat = categories[i];
-      if (_normalizedCategoryKey(cat.title) == title ||
-          _normalizedCategoryKey(cat.id) == title) {
-        targetIndex = i;
-        break;
-      }
-      for (final sub in cat.subCategories) {
-        if (_normalizedCategoryKey(sub.title) == title ||
-            _normalizedCategoryKey(sub.id) == title) {
+    for (int i = 0; i < tabs.length; i++) {
+      for (final cat in tabs[i].categories) {
+        if (_normalizedCategoryKey(cat.title) == title ||
+            _normalizedCategoryKey(cat.id) == title) {
           targetIndex = i;
           break outer;
+        }
+        for (final sub in cat.subCategories) {
+          if (_normalizedCategoryKey(sub.title) == title ||
+              _normalizedCategoryKey(sub.id) == title) {
+            targetIndex = i;
+            break outer;
+          }
         }
       }
     }
@@ -130,12 +172,17 @@ class _DiscoverScreenState extends State<DiscoverScreen>
   Widget build(BuildContext context) {
     final topLevelCategories =
         context.watch<ProductProvider>().discoverCategories;
+    final displayedTabs = _buildDisplayedTabs(topLevelCategories);
 
     final controller = _tabController;
     if (controller == null) return const SizedBox.shrink();
 
+    final safeIndex = displayedTabs.isEmpty
+        ? 0
+        : _currentTabIndex.clamp(0, displayedTabs.length - 1);
+    final currentTab = displayedTabs.isEmpty ? null : displayedTabs[safeIndex];
     final tabSections = _filterSectionsForQuery(
-      _sectionsForTab(topLevelCategories, _currentTabIndex),
+      currentTab == null ? const <_PetSection>[] : _sectionsForTab(currentTab),
       _searchQuery,
     );
     final hasQuery = _searchQuery.trim().isNotEmpty;
@@ -213,14 +260,14 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                       ),
-                      isScrollable: topLevelCategories.length > 3,
-                      tabAlignment: topLevelCategories.length > 3
+                      isScrollable: displayedTabs.length > 3,
+                      tabAlignment: displayedTabs.length > 3
                           ? TabAlignment.start
                           : TabAlignment.fill,
-                      tabs: topLevelCategories.isEmpty
+                      tabs: displayedTabs.isEmpty
                           ? const [Tab(text: 'All')]
-                          : topLevelCategories
-                              .map((c) => Tab(text: c.title))
+                          : displayedTabs
+                              .map((t) => Tab(text: t.title))
                               .toList(),
                     ),
                   ),
@@ -234,6 +281,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
               categoryCrossAxisCount,
               categoryTileSize,
               categoryTileMainExtent,
+              currentTabTitle: currentTab?.title ?? '',
               hasQuery: hasQuery,
             ),
           ],
@@ -249,6 +297,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     int categoryCrossAxisCount,
     double categoryTileSize,
     double categoryTileMainExtent, {
+    required String currentTabTitle,
     required bool hasQuery,
   }) {
     final slivers = <Widget>[
@@ -273,9 +322,8 @@ class _DiscoverScreenState extends State<DiscoverScreen>
               Text(
                 hasQuery
                     ? 'Search results'
-                    : categories.isNotEmpty &&
-                          _currentTabIndex < categories.length
-                    ? 'For ${categories[_currentTabIndex].title.toLowerCase()}'
+                    : currentTabTitle.isNotEmpty
+                    ? 'For ${currentTabTitle.toLowerCase()}'
                     : '',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.w700,
@@ -306,24 +354,29 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     }
 
     for (final section in tabSections) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              defaultPadding,
-              defaultPadding,
-              defaultPadding,
-              defaultPadding / 2,
-            ),
-            child: Text(
-              section.title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+      if (section.title.isNotEmpty) {
+        slivers.add(
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                defaultPadding,
+                defaultPadding,
+                defaultPadding,
+                defaultPadding / 2,
+              ),
+              child: Text(
+                section.title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
             ),
           ),
-        ),
-      );
+        );
+      } else {
+        // Small breathing room above the grid when there's no header.
+        slivers.add(const SliverToBoxAdapter(child: SizedBox(height: 8)));
+      }
 
       slivers.add(
         SliverPadding(
@@ -354,7 +407,7 @@ class _DiscoverScreenState extends State<DiscoverScreen>
                     categoryProductsScreenRoute,
                     arguments: <String, String>{
                       'categoryTitle': fullCategoryTitle,
-                      'petType': _currentTabIndex == 0 ? 'dogs' : 'cats',
+                      'petType': currentTabTitle.toLowerCase(),
                     },
                   );
                 },
@@ -368,17 +421,29 @@ class _DiscoverScreenState extends State<DiscoverScreen>
     return slivers;
   }
 
-  List<_PetSection> _sectionsForTab(
-    List<CategoryModel> categories,
-    int tabIndex,
-  ) {
-    if (categories.isEmpty || tabIndex >= categories.length) {
+  List<_PetSection> _sectionsForTab(_DiscoverTab tab) {
+    if (tab.categories.isEmpty) {
       return const <_PetSection>[];
     }
 
-    final parent = categories[tabIndex];
+    // Others tab — flatten every top-level category (and the children of any
+    // that have sub-categories) into a single unified grid. No per-category
+    // section headers.
+    if (tab.isOthers) {
+      final flat = <CategoryModel>[];
+      for (final cat in tab.categories) {
+        if (cat.subCategories.isEmpty) {
+          flat.add(cat);
+        } else {
+          flat.addAll(cat.subCategories);
+        }
+      }
+      return [_PetSection(title: '', categories: flat)];
+    }
 
-    // If this top-level category has no children, surface it directly.
+    final parent = tab.categories.first;
+
+    // If this top-level pet category has no children, surface it directly.
     if (parent.subCategories.isEmpty) {
       return [_PetSection(title: parent.title, categories: [parent])];
     }
@@ -504,6 +569,21 @@ class _PetSection {
 
   final String title;
   final List<CategoryModel> categories;
+}
+
+/// One entry in the Discover tab bar. For Dogs and Cats, [categories] holds
+/// a single parent category. For the "Others" bucket, [categories] holds
+/// every remaining parentless top-level category and [isOthers] is true.
+class _DiscoverTab {
+  const _DiscoverTab({
+    required this.title,
+    required this.categories,
+    this.isOthers = false,
+  });
+
+  final String title;
+  final List<CategoryModel> categories;
+  final bool isOthers;
 }
 
 class _DiscoverTabHeaderDelegate extends SliverPersistentHeaderDelegate {
