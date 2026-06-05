@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 import 'package:shop/models/app_user_model.dart';
 import 'package:shop/repositories/auth_repository.dart';
@@ -77,23 +76,6 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       _currentUser = null;
-      return true;
-    } catch (error) {
-      _errorMessage = _mapAuthError(error);
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<bool> signInWithGoogle() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      _currentUser = await _authRepository.signInWithGoogle();
       return true;
     } catch (error) {
       _errorMessage = _mapAuthError(error);
@@ -336,26 +318,6 @@ class AuthProvider extends ChangeNotifier {
             return rawMessage;
           }
           return 'Authentication failed. Please try again.';
-      }
-    }
-
-    if (error is GoogleSignInException) {
-      switch (error.code) {
-        case GoogleSignInExceptionCode.canceled:
-          return 'Google Sign-In was canceled.';
-        case GoogleSignInExceptionCode.clientConfigurationError:
-        case GoogleSignInExceptionCode.providerConfigurationError:
-          return 'Google Sign-In is not available right now. Please use another sign-in method.';
-        case GoogleSignInExceptionCode.uiUnavailable:
-          return 'Google Sign-In UI is unavailable right now. Please try again.';
-        case GoogleSignInExceptionCode.userMismatch:
-          return 'Google Sign-In session mismatch. Please try again.';
-        case GoogleSignInExceptionCode.interrupted:
-          return 'Google Sign-In was interrupted. Please try again.';
-        case GoogleSignInExceptionCode.unknownError:
-          return ((error.description ?? '').trim().isNotEmpty)
-              ? error.description!.trim()
-              : 'Google Sign-In failed. Please try again.';
       }
     }
 

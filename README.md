@@ -14,7 +14,7 @@ PetsWorld is a pet products & grooming e-commerce app built with Flutter, with t
 ## Features
 
 ### Shopper (mobile)
-- Email/password, Google Sign-In, and Phone OTP login
+- Email/password and Phone OTP login
 - 4-tab shell: **Shop** · **Discover** · **Saved** · **Profile**
 - Home with admin-managed banners + dynamic offer sections
 - Category & sub-category browse (Dogs / Cats parent tabs)
@@ -130,8 +130,8 @@ flutter pub get
 
 ### 2. Firebase
 - `lib/firebase_options.dart` is committed (FlutterFire-generated for project `pet-shop-app-ee6f2`).
-- Enable Auth providers in Firebase Console: **Email/Password**, **Google**, **Phone**.
-- Android: add **SHA-1** and **SHA-256** for your debug + release keystores in the Firebase Console (required for Google + Phone auth).
+- Enable Auth providers in Firebase Console: **Email/Password**, **Phone**.
+- Android: add **SHA-1** and **SHA-256** for your debug + release keystores in the Firebase Console (required for Phone auth).
 - iOS: `ios/Runner/GoogleService-Info.plist` is committed; for Codemagic builds, set the `GOOGLE_SERVICE_INFO_PLIST` env var (see iOS section below).
 
 ### 3. Cloudinary

@@ -69,8 +69,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '119947379250',
     projectId: 'pet-shop-app-ee6f2',
     storageBucket: 'pet-shop-app-ee6f2.firebasestorage.app',
-    iosClientId:
-        '119947379250-utlm8hm9qne295306qfcm61tb2b0pqe7.apps.googleusercontent.com',
     iosBundleId: 'com.petsworld.shop',
   );
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
 import 'package:provider/provider.dart';
 import 'package:shop/constants.dart';
 import 'package:shop/providers/auth_provider.dart';
@@ -53,11 +52,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
               const Text(
                 'Enter your account email and we will send a password reset link.',
               ),
-              const SizedBox(height: defaultPadding / 2),
-              const Text(
-                'If this account uses Google Sign-In only, use Continue with Google instead of password reset.',
-                style: TextStyle(color: blackColor60),
-              ),
               const SizedBox(height: defaultPadding),
               TextFormField(
                 controller: _emailController,
@@ -89,26 +83,6 @@ class _PasswordRecoveryScreenState extends State<PasswordRecoveryScreen> {
                           final navigator = Navigator.of(context);
                           if (!_formKey.currentState!.validate()) return;
                           final email = _emailController.text.trim();
-                          final firebaseUser =
-                              FirebaseAuth.instance.currentUser;
-                          final providers =
-                              firebaseUser?.providerData
-                                  .map((item) => item.providerId)
-                                  .toSet() ??
-                              <String>{};
-                          if (firebaseUser != null &&
-                              firebaseUser.email == email &&
-                              providers.contains('google.com') &&
-                              !providers.contains('password')) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'This account is using Google Sign-In. Please continue with Google.',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
 
                           final success = await authNotifier
                               .sendPasswordResetEmail(email);

@@ -133,14 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 14),
           _AuthActionButton(
-            label: 'Continue with Google',
-            icon: Icons.language_rounded,
-            onPressed: authProvider.isLoading
-                ? null
-                : () => _signInWithGoogle(context),
-          ),
-          const SizedBox(height: 12),
-          _AuthActionButton(
             label: 'Continue with phone OTP',
             icon: Icons.sms_outlined,
             onPressed: authProvider.isLoading
@@ -255,30 +247,6 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _signInWithGoogle(BuildContext context) async {
-    final auth = context.read<AuthProvider>();
-    final cartProvider = context.read<CartProvider>();
-    final productProvider = context.read<ProductProvider>();
-    final orderProvider = context.read<OrderProvider>();
-    final navigator = Navigator.of(context);
-    final success = await auth.signInWithGoogle();
-    if (!context.mounted) return;
-    if (!success) {
-      final message = auth.errorMessage ?? 'Unable to sign in with Google.';
-      await showAuthErrorDialog(context, message: message);
-      auth.clearError();
-      return;
-    }
-
-    final userId = auth.currentUser?.uid;
-    await cartProvider.syncForUser(userId);
-    await productProvider.syncUserData(userId);
-    await orderProvider.syncForUser(userId);
-
-    if (!context.mounted) return;
-    navigator.pushNamedAndRemoveUntil(entryPointScreenRoute, (route) => false);
   }
 
   Future<void> _signIn(BuildContext context) async {

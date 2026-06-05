@@ -2,9 +2,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shop/providers/auth_provider.dart';
-import 'package:shop/providers/cart_provider.dart';
-import 'package:shop/providers/order_provider.dart';
-import 'package:shop/providers/product_provider.dart';
 import 'package:shop/route/route_constants.dart';
 import 'package:shop/screens/auth/views/components/auth_feedback.dart';
 import 'package:shop/screens/auth/views/components/auth_shell.dart';
@@ -91,14 +88,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          _AuthActionButton(
-            label: 'Sign up with Google',
-            icon: Icons.language_rounded,
-            onPressed: authProvider.isLoading
-                ? null
-                : () => _signUpWithGoogle(context),
-          ),
-          const SizedBox(height: 12),
           _AuthActionButton(
             label: 'Sign up with phone OTP',
             icon: Icons.sms_outlined,
@@ -207,30 +196,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       ),
     );
-  }
-
-  Future<void> _signUpWithGoogle(BuildContext context) async {
-    final auth = context.read<AuthProvider>();
-    final cartProvider = context.read<CartProvider>();
-    final productProvider = context.read<ProductProvider>();
-    final orderProvider = context.read<OrderProvider>();
-    final navigator = Navigator.of(context);
-    final success = await auth.signInWithGoogle();
-    if (!context.mounted) return;
-    if (!success) {
-      final message = auth.errorMessage ?? 'Unable to sign up with Google.';
-      await showAuthErrorDialog(context, message: message);
-      auth.clearError();
-      return;
-    }
-
-    final userId = auth.currentUser?.uid;
-    await cartProvider.syncForUser(userId);
-    await productProvider.syncUserData(userId);
-    await orderProvider.syncForUser(userId);
-
-    if (!context.mounted) return;
-    navigator.pushNamedAndRemoveUntil(entryPointScreenRoute, (route) => false);
   }
 
   Future<void> _signUp(BuildContext context) async {

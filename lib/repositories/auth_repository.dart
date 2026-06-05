@@ -4,9 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
-import 'package:shop/firebase_options.dart';
 import 'package:shop/models/app_user_model.dart';
 
 abstract class AuthRepository {
@@ -20,7 +18,6 @@ abstract class AuthRepository {
     required String password,
     required String name,
   });
-  Future<AppUserModel> signInWithGoogle();
   Future<PhoneAuthRequestResult> requestPhoneOtp({
     required String phoneNumber,
     int? forceResendingToken,
@@ -45,19 +42,14 @@ class FirebaseAuthRepository implements AuthRepository {
   static const Duration _profileOperationTimeout = Duration(seconds: 20);
   static const Duration _secondaryOperationTimeout = Duration(seconds: 10);
 
-  static const String _googleServerClientId =
-      '119947379250-aj44ibm1mc0823krjoal509mamtgdr3e.apps.googleusercontent.com';
-
   FirebaseAuthRepository({
     FirebaseAuth? firebaseAuth,
     FirebaseFirestore? firestore,
   }) : _firebaseAuth = firebaseAuth,
        _firestore = firestore;
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
   final FirebaseAuth? _firebaseAuth;
   final FirebaseFirestore? _firestore;
-  Future<void>? _googleInitialization;
 
   FirebaseAuth get _auth => _firebaseAuth ?? FirebaseAuth.instance;
   FirebaseFirestore get _db => _firestore ?? FirebaseFirestore.instance;
@@ -199,52 +191,6 @@ class FirebaseAuthRepository implements AuthRepository {
           );
         } catch (_) {}
       }
-    }
-  }
-
-  @override
-  Future<AppUserModel> signInWithGoogle() async {
-    _ensureReady();
-    await _ensureGoogleInitialized();
-
-    try {
-      if (!_googleSignIn.supportsAuthenticate()) {
-        throw UnsupportedError(
-          'Google Sign-In is not supported on this platform with the current app configuration.',
-        );
-      }
-
-      final googleUser = await _googleSignIn.authenticate();
-      final googleAuth = googleUser.authentication;
-      final idToken = googleAuth.idToken;
-      if ((idToken ?? '').trim().isEmpty) {
-        throw FirebaseAuthException(
-          code: 'google-id-token-missing',
-          message:
-              'Google Sign-In completed, but no ID token was returned. Check the Firebase Google provider and platform OAuth configuration.',
-        );
-      }
-
-      final credential = GoogleAuthProvider.credential(idToken: idToken);
-
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user!;
-
-      final userDoc = await _db.collection('users').doc(user.uid).get();
-      if (!userDoc.exists) {
-        final appUser = AppUserModel(
-          uid: user.uid,
-          email: user.email ?? '',
-          name: user.displayName ?? 'Pet Parent',
-          role: AppUserRole.user,
-          createdAt: DateTime.now(),
-        );
-        await _db.collection('users').doc(user.uid).set(appUser.toMap());
-      }
-
-      return _loadUserProfile(user);
-    } catch (e) {
-      rethrow;
     }
   }
 
@@ -407,22 +353,11 @@ class FirebaseAuthRepository implements AuthRepository {
     final userId = user.uid;
     await _deleteUserData(userId);
     await user.delete();
-
-    try {
-      await _googleSignIn.signOut();
-    } catch (_) {}
   }
 
   @override
   Future<void> signOut() async {
     if (!_isReady) return;
-
-    // Google Sign-In plugin can throw platform errors on some devices/sessions.
-    // We still sign out from Firebase to avoid blocking logout.
-    try {
-      await _googleSignIn.signOut();
-    } catch (_) {}
-
     await _auth.signOut();
   }
 
@@ -490,33 +425,6 @@ class FirebaseAuthRepository implements AuthRepository {
         'the platform config files before using authentication.',
       );
     }
-  }
-
-  Future<void> _ensureGoogleInitialized() {
-    return _googleInitialization ??= _googleSignIn.initialize(
-      clientId: _googleClientId,
-      serverClientId: _googleServerClientId,
-    );
-  }
-
-  String? get _googleClientId {
-    final options = DefaultFirebaseOptions.currentPlatform;
-    if (kIsWeb) return null;
-
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.iOS:
-      case TargetPlatform.macOS:
-        return _nonEmpty(options.iosClientId);
-      case TargetPlatform.android:
-        return null;
-      default:
-        return null;
-    }
-  }
-
-  String? _nonEmpty(String? value) {
-    final trimmed = value?.trim() ?? '';
-    return trimmed.isEmpty ? null : trimmed;
   }
 
   Future<void> _deleteUserData(String userId) async {
