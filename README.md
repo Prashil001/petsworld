@@ -178,31 +178,6 @@ Hosting is configured in `firebase.json` to serve `build/web` with cache-busting
 
 ---
 
-## Build iOS from Windows (Codemagic)
-
-You don't need a Mac. `codemagic.yaml` defines two workflows:
-
-| Workflow | Purpose |
-|----------|---------|
-| `ios-release` | Builds + signs + uploads to **TestFlight** (and optionally App Store) |
-| `ios-adhoc` | Builds an ad-hoc `.ipa` for direct device install |
-
-### One-time setup
-1. **Apple Developer Program** ($99/yr) → create an **App Store Connect API key** (Issuer ID, Key ID, `.p8` file).
-2. Connect your repo to Codemagic; under **Team → Integrations → Developer Portal**, paste those three values.
-3. Add Codemagic env var group **`firebase_ios`** with `GOOGLE_SERVICE_INFO_PLIST` = base64 of your current `GoogleService-Info.plist`:
-   ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("ios\Runner\GoogleService-Info.plist")) | clip
-   ```
-4. Create the app record in App Store Connect with bundle ID `com.petsworld.shop`.
-
-Then start a build of `ios-release` from the Codemagic UI; the IPA lands in TestFlight on success.
-
-### iOS deployment target
-Both `ios/Podfile` and `ios/Runner.xcodeproj/project.pbxproj` are set to **iOS 15.0** (required by Firebase SDK ≥13 and matches the Podfile post-install).
-
----
-
 ## Cloud Functions
 
 Located in `functions/`. Deploy with:
