@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shop/providers/auth_provider.dart';
@@ -132,6 +135,16 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
           ),
           const SizedBox(height: 14),
+          if (_isApplePlatform) ...[
+            _AuthActionButton(
+              label: 'Continue with Apple',
+              icon: Icons.apple,
+              onPressed: authProvider.isLoading
+                  ? null
+                  : () => _signInWithApple(context),
+            ),
+            const SizedBox(height: 12),
+          ],
           _AuthActionButton(
             label: 'Continue with phone OTP',
             icon: Icons.sms_outlined,
@@ -273,6 +286,34 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!success) {
       final message =
           auth.errorMessage ?? 'Unable to log in with email and password.';
+      await showAuthErrorDialog(context, message: message);
+      auth.clearError();
+      return;
+    }
+
+    final userId = auth.currentUser?.uid;
+    await cartProvider.syncForUser(userId);
+    await productProvider.syncUserData(userId);
+    await orderProvider.syncForUser(userId);
+
+    if (!context.mounted) return;
+    navigator.pushNamedAndRemoveUntil(entryPointScreenRoute, (route) => false);
+  }
+
+  bool get _isApplePlatform => !kIsWeb && Platform.isIOS;
+
+  Future<void> _signInWithApple(BuildContext context) async {
+    final auth = context.read<AuthProvider>();
+    final cartProvider = context.read<CartProvider>();
+    final productProvider = context.read<ProductProvider>();
+    final orderProvider = context.read<OrderProvider>();
+    final navigator = Navigator.of(context);
+
+    final success = await auth.signInWithApple();
+
+    if (!context.mounted) return;
+    if (!success) {
+      final message = auth.errorMessage ?? 'Unable to sign in with Apple.';
       await showAuthErrorDialog(context, message: message);
       auth.clearError();
       return;

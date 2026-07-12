@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'package:shop/models/app_user_model.dart';
 
@@ -18,6 +22,7 @@ abstract class AuthRepository {
     required String password,
     required String name,
   });
+  Future<AppUserModel> signInWithApple();
   Future<PhoneAuthRequestResult> requestPhoneOtp({
     required String phoneNumber,
     int? forceResendingToken,
@@ -32,7 +37,7 @@ abstract class AuthRepository {
     required String password,
   });
   Future<void> sendPasswordResetEmail(String email);
-  Future<AppUserModel> updateProfile({required String name});
+  Future<AppUserModel> updateProfile({required String name, String? email});
   Future<void> deleteAccount();
   Future<void> signOut();
 }
@@ -195,6 +200,69 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUserModel> signInWithApple() async {
+    _ensureReady();
+
+    final rawNonce = _generateNonce();
+    final nonce = _sha256ofString(rawNonce);
+
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: nonce,
+    );
+
+    final identityToken = appleCredential.identityToken;
+    if ((identityToken ?? '').trim().isEmpty) {
+      throw FirebaseAuthException(
+        code: 'apple-id-token-missing',
+        message: 'Apple Sign-In could not be completed. Please try again.',
+      );
+    }
+
+    final oauthCredential = OAuthProvider('apple.com').credential(
+      idToken: identityToken,
+      rawNonce: rawNonce,
+      accessToken: appleCredential.authorizationCode,
+    );
+
+    final userCredential = await _auth.signInWithCredential(oauthCredential);
+    final user = userCredential.user!;
+
+    final appleFullName = <String?>[
+      appleCredential.givenName,
+      appleCredential.familyName,
+    ].where((part) => (part ?? '').trim().isNotEmpty).join(' ').trim();
+
+    if (appleFullName.isNotEmpty && (user.displayName ?? '').trim().isEmpty) {
+      await user.updateDisplayName(appleFullName);
+    }
+
+    return _loadUserProfile(
+      user,
+      preferredName: appleFullName.isNotEmpty ? appleFullName : null,
+    );
+  }
+
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
+
+  @override
   Future<PhoneAuthRequestResult> requestPhoneOtp({
     required String phoneNumber,
     int? forceResendingToken,
@@ -308,7 +376,10 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AppUserModel> updateProfile({required String name}) async {
+  Future<AppUserModel> updateProfile({
+    required String name,
+    String? email,
+  }) async {
     _ensureReady();
     final user = _auth.currentUser;
     if (user == null) {
@@ -316,15 +387,30 @@ class FirebaseAuthRepository implements AuthRepository {
     }
 
     final trimmedName = name.trim();
+    final trimmedEmail = email?.trim();
 
     await user.updateDisplayName(trimmedName);
-    await _db.collection('users').doc(user.uid).set(<String, dynamic>{
+
+    // Only include 'email' in the merge write when we actually have a
+    // value to set. Phone-only accounts have no Firebase Auth email, so
+    // omitting the key (rather than writing '') preserves whatever
+    // contact email was previously saved to Firestore.
+    final updateData = <String, dynamic>{
       'uid': user.uid,
-      'email': user.email ?? '',
       'name': trimmedName,
       'phoneNumber': user.phoneNumber,
       'updatedAt': DateTime.now().toIso8601String(),
-    }, SetOptions(merge: true));
+    };
+    if (trimmedEmail != null) {
+      updateData['email'] = trimmedEmail;
+    } else if ((user.email ?? '').isNotEmpty) {
+      updateData['email'] = user.email;
+    }
+
+    await _db
+        .collection('users')
+        .doc(user.uid)
+        .set(updateData, SetOptions(merge: true));
 
     return _loadUserProfile(user);
   }

@@ -47,6 +47,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     }
 
     final initials = _initialsFor(user?.name);
+    // Phone-OTP accounts have no Firebase Auth email/password credential,
+    // so their email is just a contact field, safe to edit here. Email
+    // (and Apple) accounts keep it locked since it's tied to their login.
+    final isPhoneAccount = (user?.phoneNumber ?? '').trim().isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile details')),
@@ -164,12 +168,28 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
-                            readOnly: true,
-                            enabled: false,
-                            decoration: const InputDecoration(
+                            readOnly: !isPhoneAccount,
+                            enabled: isPhoneAccount,
+                            decoration: InputDecoration(
                               labelText: 'Email',
-                              hintText: 'Email cannot be changed here',
+                              hintText: isPhoneAccount
+                                  ? 'Add an email for order receipts and payments'
+                                  : 'Email cannot be changed here',
                             ),
+                            validator: (value) {
+                              if (!isPhoneAccount) return null;
+                              final trimmed = (value ?? '').trim();
+                              if (trimmed.isEmpty) return null;
+                              final isValid =
+                                  trimmed.contains('@') &&
+                                  trimmed.contains('.') &&
+                                  !trimmed.startsWith('@') &&
+                                  !trimmed.endsWith('@');
+                              if (!isValid) {
+                                return 'Enter a valid email address';
+                              }
+                              return null;
+                            },
                           ),
                           const SizedBox(height: defaultPadding),
                           TextFormField(
@@ -200,6 +220,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                       final success = await authNotifier
                                           .updateProfile(
                                             name: _nameController.text,
+                                            email: isPhoneAccount
+                                                ? _emailController.text
+                                                : null,
                                           );
                                       if (!context.mounted) return;
                                       if (!success) {
