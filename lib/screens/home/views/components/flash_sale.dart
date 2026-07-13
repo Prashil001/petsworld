@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/section_empty_state.dart';
 import 'package:shop/providers/product_provider.dart';
 import 'package:shop/route/route_constants.dart';
@@ -9,9 +10,7 @@ import '../../../../components/product/product_card.dart';
 import '../../../../constants.dart';
 
 class FlashSale extends StatelessWidget {
-  const FlashSale({
-    super.key,
-  });
+  const FlashSale({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -60,8 +59,12 @@ class FlashSale extends StatelessWidget {
                   dicountpercent: products[index].dicountpercent,
                   isSaved: productProvider.isBookmarked(products[index].id),
                   onToggleSaved: () {
-                    context.read<ProductProvider>().toggleBookmark(products[index]);
+                    context.read<ProductProvider>().toggleBookmark(
+                      products[index],
+                    );
                   },
+                  onAddToCart: () =>
+                      addProductToCartFromCard(context, products[index]),
                   press: () {
                     Navigator.pushNamed(
                       context,

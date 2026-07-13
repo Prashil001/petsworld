@@ -19,6 +19,11 @@ Future<String?> saveOrderExportFile({
 }
 
 Future<Directory> _resolveDownloadDirectory() async {
+  if (Platform.isIOS) {
+    final appDirectory = await getApplicationDocumentsDirectory();
+    return Directory('${appDirectory.path}${Platform.pathSeparator}petsworld');
+  }
+
   final downloadsDirectory = await getDownloadsDirectory();
   if (downloadsDirectory != null) {
     return Directory(

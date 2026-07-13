@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shop/components/product/product_card.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/section_empty_state.dart';
 import 'package:shop/providers/product_provider.dart';
 
@@ -8,9 +9,7 @@ import '../../../../constants.dart';
 import '../../../../route/route_constants.dart';
 
 class BestSellers extends StatelessWidget {
-  const BestSellers({
-    super.key,
-  });
+  const BestSellers({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -54,8 +53,12 @@ class BestSellers extends StatelessWidget {
                   dicountpercent: products[index].dicountpercent,
                   isSaved: productProvider.isBookmarked(products[index].id),
                   onToggleSaved: () {
-                    context.read<ProductProvider>().toggleBookmark(products[index]);
+                    context.read<ProductProvider>().toggleBookmark(
+                      products[index],
+                    );
                   },
+                  onAddToCart: () =>
+                      addProductToCartFromCard(context, products[index]),
                   press: () {
                     Navigator.pushNamed(
                       context,

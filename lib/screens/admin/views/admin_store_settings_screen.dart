@@ -176,7 +176,9 @@ class _AdminStoreSettingsScreenState extends State<AdminStoreSettingsScreen> {
                       }
                       final uri = Uri.tryParse(trimmed);
                       if (uri == null ||
-                          !(uri.hasScheme && (uri.isScheme('http') || uri.isScheme('https')))) {
+                          !(uri.hasScheme &&
+                              (uri.isScheme('http') ||
+                                  uri.isScheme('https')))) {
                         return 'Enter a valid backend URL';
                       }
                       return null;
@@ -208,8 +210,9 @@ class _AdminStoreSettingsScreenState extends State<AdminStoreSettingsScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _merchantNameController,
-                    validator: (value) =>
-                        (value ?? '').trim().isEmpty ? 'Enter a merchant name' : null,
+                    validator: (value) => (value ?? '').trim().isEmpty
+                        ? 'Enter a merchant name'
+                        : null,
                     decoration: const InputDecoration(
                       labelText: 'Checkout merchant name',
                     ),
@@ -240,10 +243,13 @@ class _AdminStoreSettingsScreenState extends State<AdminStoreSettingsScreen> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    validator: (value) =>
-                        double.tryParse((value ?? '').trim()) == null
-                        ? 'Enter a valid threshold'
-                        : null,
+                    validator: (value) {
+                      final threshold = double.tryParse((value ?? '').trim());
+                      if (threshold == null || threshold <= 0) {
+                        return 'Enter a threshold greater than 0';
+                      }
+                      return null;
+                    },
                     decoration: const InputDecoration(
                       labelText: 'Free delivery threshold (Rs)',
                     ),
@@ -254,10 +260,13 @@ class _AdminStoreSettingsScreenState extends State<AdminStoreSettingsScreen> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    validator: (value) =>
-                        double.tryParse((value ?? '').trim()) == null
-                        ? 'Enter a valid fee'
-                        : null,
+                    validator: (value) {
+                      final fee = double.tryParse((value ?? '').trim());
+                      if (fee == null || fee <= 0) {
+                        return 'Enter a delivery fee greater than 0';
+                      }
+                      return null;
+                    },
                     decoration: const InputDecoration(
                       labelText: 'Delivery fee (Rs)',
                     ),
@@ -267,7 +276,9 @@ class _AdminStoreSettingsScreenState extends State<AdminStoreSettingsScreen> {
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: adminProvider.isSaving ? null : _save,
-                      child: Text(adminProvider.isSaving ? 'Saving...' : 'Save settings'),
+                      child: Text(
+                        adminProvider.isSaving ? 'Saving...' : 'Save settings',
+                      ),
                     ),
                   ),
                 ],
@@ -312,7 +323,9 @@ class _AdminStoreSettingsScreenState extends State<AdminStoreSettingsScreen> {
       );
       return;
     }
-    final paymentSaved = await adminProvider.savePaymentSettings(paymentSettings);
+    final paymentSaved = await adminProvider.savePaymentSettings(
+      paymentSettings,
+    );
     if (!mounted) return;
     if (!paymentSaved) {
       ScaffoldMessenger.of(context).showSnackBar(

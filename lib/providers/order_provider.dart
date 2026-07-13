@@ -23,6 +23,7 @@ class OrderProvider extends ChangeNotifier {
   List<OrderModel> _orders = <OrderModel>[];
   bool _isLoading = false;
   String? _errorMessage;
+  String? _invoiceErrorMessage;
   String? _userId;
 
   List<OrderModel> get orders => List<OrderModel>.unmodifiable(_orders);
@@ -43,6 +44,7 @@ class OrderProvider extends ChangeNotifier {
       .toList();
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  String? get invoiceErrorMessage => _invoiceErrorMessage;
 
   void addOrder(OrderModel order) {
     final index = _orders.indexWhere((current) => current.id == order.id);
@@ -153,13 +155,13 @@ class OrderProvider extends ChangeNotifier {
   }
 
   Future<OrderInvoiceResult?> saveInvoice(OrderModel order) async {
-    _errorMessage = null;
+    _invoiceErrorMessage = null;
     notifyListeners();
 
     try {
       return await _orderInvoiceService.saveInvoice(order);
     } catch (error) {
-      _errorMessage = error.toString();
+      _invoiceErrorMessage = error.toString();
       notifyListeners();
       return null;
     }

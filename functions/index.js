@@ -167,6 +167,224 @@ exports.notifyAdminOnOrderCancelled = onDocumentUpdated(
   },
 );
 
+exports.decrementProductStockOnNewOrder = onDocumentCreated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-south1",
+  },
+  async (event) => {
+    const snapshot = event.data;
+    const order = snapshot?.data();
+    if (!snapshot || !order) {
+      logger.warn("Stock decrement skipped because order data is missing.");
+      return;
+    }
+
+    if (order.stockDecremented === true) {
+      logger.info("Stock decrement skipped because order was already marked.", {
+        orderId: event.params.orderId,
+      });
+      return;
+    }
+
+    const items = Array.isArray(order.items) ? order.items : [];
+    const itemsByProduct = groupOrderItemsByProduct(items);
+    if (itemsByProduct.size === 0) {
+      logger.warn("Stock decrement skipped because order has no valid items.", {
+        orderId: event.params.orderId,
+      });
+      return;
+    }
+
+    const db = admin.firestore();
+    const orderRef = snapshot.ref;
+
+    await db.runTransaction(async (transaction) => {
+      const latestOrderSnapshot = await transaction.get(orderRef);
+      const latestOrder = latestOrderSnapshot.data();
+      if (latestOrder?.stockDecremented === true) {
+        return;
+      }
+
+      const pendingProductUpdates = [];
+      const stockIssues = [];
+
+      for (const [productId, productItems] of itemsByProduct.entries()) {
+        const productRef = db.collection("products").doc(productId);
+        const productSnapshot = await transaction.get(productRef);
+        if (!productSnapshot.exists) {
+          stockIssues.push({
+            productId,
+            reason: "product_not_found",
+          });
+          continue;
+        }
+
+        const product = productSnapshot.data() || {};
+        const packOptions = Array.isArray(product.packOptions)
+          ? product.packOptions.map((pack) => ({ ...pack }))
+          : [];
+
+        if (packOptions.length > 0) {
+          const update = decrementPackStock({
+            product,
+            packOptions,
+            items: productItems,
+            productId,
+            stockIssues,
+          });
+          pendingProductUpdates.push([productRef, update]);
+        } else {
+          const orderedQuantity = productItems.reduce(
+            (total, item) => total + item.quantity,
+            0,
+          );
+          const currentStock = toInteger(product.stockQuantity);
+          if (currentStock < orderedQuantity) {
+            stockIssues.push({
+              productId,
+              reason: "insufficient_stock",
+              available: currentStock,
+              requested: orderedQuantity,
+            });
+          }
+
+          pendingProductUpdates.push([
+            productRef,
+            {
+              stockQuantity: Math.max(0, currentStock - orderedQuantity),
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+          ]);
+        }
+      }
+
+      for (const [productRef, update] of pendingProductUpdates) {
+        transaction.update(productRef, update);
+      }
+
+      transaction.update(orderRef, {
+        stockDecremented: pendingProductUpdates.length > 0,
+        stockReservationStatus:
+          stockIssues.length === 0 ? "decremented" : "decremented_with_issues",
+        stockReservationIssues: stockIssues,
+        stockUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    logger.info("Stock decrement processed for order.", {
+      orderId: event.params.orderId,
+    });
+  },
+);
+
+exports.restoreProductStockOnOrderCancelled = onDocumentUpdated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-south1",
+  },
+  async (event) => {
+    const beforeOrder = event.data?.before?.data();
+    const afterOrder = event.data?.after?.data();
+    if (!afterOrder) {
+      logger.warn("Stock restore skipped because updated order data is missing.");
+      return;
+    }
+
+    const beforeStatus = String(
+      beforeOrder?.orderStatus || beforeOrder?.status || "",
+    ).trim();
+    const afterStatus = String(
+      afterOrder.orderStatus || afterOrder.status || "",
+    ).trim();
+
+    if (
+      afterStatus !== "cancelled" ||
+      beforeStatus === "cancelled" ||
+      afterOrder.stockDecremented !== true
+    ) {
+      return;
+    }
+
+    const items = Array.isArray(afterOrder.items) ? afterOrder.items : [];
+    const itemsByProduct = groupOrderItemsByProduct(items);
+    if (itemsByProduct.size === 0) {
+      logger.warn("Stock restore skipped because order has no valid items.", {
+        orderId: event.params.orderId,
+      });
+      return;
+    }
+
+    const db = admin.firestore();
+    const orderRef = event.data.after.ref;
+
+    await db.runTransaction(async (transaction) => {
+      const latestOrderSnapshot = await transaction.get(orderRef);
+      const latestOrder = latestOrderSnapshot.data();
+      if (
+        latestOrder?.stockDecremented !== true ||
+        String(latestOrder?.orderStatus || latestOrder?.status || "") !==
+          "cancelled"
+      ) {
+        return;
+      }
+
+      const pendingProductUpdates = [];
+      for (const [productId, productItems] of itemsByProduct.entries()) {
+        const productRef = db.collection("products").doc(productId);
+        const productSnapshot = await transaction.get(productRef);
+        if (!productSnapshot.exists) {
+          continue;
+        }
+
+        const product = productSnapshot.data() || {};
+        const packOptions = Array.isArray(product.packOptions)
+          ? product.packOptions.map((pack) => ({ ...pack }))
+          : [];
+
+        if (packOptions.length > 0) {
+          pendingProductUpdates.push([
+            productRef,
+            incrementPackStock({
+              product,
+              packOptions,
+              items: productItems,
+            }),
+          ]);
+        } else {
+          const restoreQuantity = productItems.reduce(
+            (total, item) => total + item.quantity,
+            0,
+          );
+          pendingProductUpdates.push([
+            productRef,
+            {
+              stockQuantity: toInteger(product.stockQuantity) + restoreQuantity,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+          ]);
+        }
+      }
+
+      for (const [productRef, update] of pendingProductUpdates) {
+        transaction.update(productRef, update);
+      }
+
+      transaction.update(orderRef, {
+        stockDecremented: false,
+        stockReservationStatus: "restored",
+        stockRestoredAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    logger.info("Stock restore processed for cancelled order.", {
+      orderId: event.params.orderId,
+    });
+  },
+);
+
 function buildOrderMessage({
   orderId,
   customerName,
@@ -248,6 +466,153 @@ function buildOrderCancelledMessage({
     "<b>Items</b>",
     `${itemLines}${extraItems}`,
   ].join("\n");
+}
+
+function groupOrderItemsByProduct(items) {
+  const grouped = new Map();
+  for (const item of items) {
+    const productId = String(item?.productId || "").trim();
+    const quantity = toInteger(item?.quantity);
+    if (!productId || quantity <= 0) {
+      continue;
+    }
+
+    const normalizedItem = {
+      productId,
+      quantity,
+      selectedOptionId: String(item?.selectedOptionId || "").trim(),
+      selectedOptionLabel: String(item?.selectedOptionLabel || "").trim(),
+    };
+    const productItems = grouped.get(productId) || [];
+    productItems.push(normalizedItem);
+    grouped.set(productId, productItems);
+  }
+  return grouped;
+}
+
+function decrementPackStock({
+  product,
+  packOptions,
+  items,
+  productId,
+  stockIssues,
+}) {
+  let fallbackStockQuantity = toInteger(product.stockQuantity);
+
+  for (const item of items) {
+    const packIndex = resolvePackIndex(packOptions, item);
+    if (packIndex === -1) {
+      if (fallbackStockQuantity < item.quantity) {
+        stockIssues.push({
+          productId,
+          selectedOptionId: item.selectedOptionId,
+          reason: "pack_not_found_or_insufficient_top_level_stock",
+          available: fallbackStockQuantity,
+          requested: item.quantity,
+        });
+      }
+      fallbackStockQuantity = Math.max(0, fallbackStockQuantity - item.quantity);
+      continue;
+    }
+
+    const currentStock = toInteger(packOptions[packIndex].stockQuantity);
+    if (currentStock < item.quantity) {
+      stockIssues.push({
+        productId,
+        selectedOptionId: item.selectedOptionId,
+        selectedOptionLabel: item.selectedOptionLabel,
+        reason: "insufficient_pack_stock",
+        available: currentStock,
+        requested: item.quantity,
+      });
+    }
+
+    packOptions[packIndex] = {
+      ...packOptions[packIndex],
+      stockQuantity: Math.max(0, currentStock - item.quantity),
+    };
+  }
+
+  return {
+    packOptions,
+    stockQuantity: resolvePrimaryPackStock(packOptions, fallbackStockQuantity),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function incrementPackStock({ product, packOptions, items }) {
+  let fallbackStockQuantity = toInteger(product.stockQuantity);
+
+  for (const item of items) {
+    const packIndex = resolvePackIndex(packOptions, item);
+    if (packIndex === -1) {
+      fallbackStockQuantity += item.quantity;
+      continue;
+    }
+
+    packOptions[packIndex] = {
+      ...packOptions[packIndex],
+      stockQuantity:
+        toInteger(packOptions[packIndex].stockQuantity) + item.quantity,
+    };
+  }
+
+  return {
+    packOptions,
+    stockQuantity: resolvePrimaryPackStock(packOptions, fallbackStockQuantity),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+}
+
+function resolvePackIndex(packOptions, item) {
+  const selectedOptionId = String(item.selectedOptionId || "").trim();
+  if (selectedOptionId) {
+    const exactIndex = packOptions.findIndex(
+      (pack) => String(pack?.id || "").trim() === selectedOptionId,
+    );
+    if (exactIndex !== -1) {
+      return exactIndex;
+    }
+  }
+
+  const selectedOptionLabel = normalizeComparable(item.selectedOptionLabel);
+  if (selectedOptionLabel) {
+    const labelIndex = packOptions.findIndex(
+      (pack) => normalizeComparable(pack?.label) === selectedOptionLabel,
+    );
+    if (labelIndex !== -1) {
+      return labelIndex;
+    }
+  }
+
+  if (!selectedOptionId) {
+    const defaultIndex = packOptions.findIndex((pack) => pack?.isDefault === true);
+    return defaultIndex === -1 ? 0 : defaultIndex;
+  }
+
+  return -1;
+}
+
+function resolvePrimaryPackStock(packOptions, fallbackStockQuantity) {
+  if (!packOptions.length) {
+    return fallbackStockQuantity;
+  }
+
+  const primaryPack =
+    packOptions.find((pack) => pack?.isDefault === true) || packOptions[0];
+  return toInteger(primaryPack?.stockQuantity);
+}
+
+function normalizeComparable(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function toInteger(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) {
+    return 0;
+  }
+  return Math.max(0, Math.trunc(number));
 }
 
 function composeAddress(deliveryAddress) {

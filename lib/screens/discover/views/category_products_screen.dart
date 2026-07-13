@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shop/components/product/product_card.dart';
 import 'package:shop/constants.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/app_loading_indicator.dart';
 import 'package:shop/core/widgets/section_empty_state.dart';
 import 'package:shop/providers/product_provider.dart';
@@ -148,6 +149,8 @@ class _CategoryProductsScreenState extends State<CategoryProductsScreen> {
                               product,
                             );
                           },
+                          onAddToCart: () =>
+                              addProductToCartFromCard(context, product),
                           press: () {
                             Navigator.pushNamed(
                               context,
