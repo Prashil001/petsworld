@@ -27,12 +27,15 @@ class DeliverySettingsModel {
   }
 
   factory DeliverySettingsModel.fromMap(Map<String, dynamic> data) {
+    final parsedThreshold = (data['freeDeliveryThreshold'] as num?)?.toDouble();
+    final parsedFee = (data['deliveryFee'] as num?)?.toDouble();
     return DeliverySettingsModel(
-      freeDeliveryThreshold:
-          (data['freeDeliveryThreshold'] as num?)?.toDouble() ?? 999,
-      deliveryFee: (data['deliveryFee'] as num?)?.toDouble() ?? 49,
-      supportWhatsAppNumber:
-          (data['supportWhatsAppNumber'] as String? ?? '').trim(),
+      freeDeliveryThreshold: parsedThreshold == null || parsedThreshold <= 0
+          ? 999
+          : parsedThreshold,
+      deliveryFee: parsedFee == null || parsedFee <= 0 ? 49 : parsedFee,
+      supportWhatsAppNumber: (data['supportWhatsAppNumber'] as String? ?? '')
+          .trim(),
     );
   }
 

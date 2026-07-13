@@ -5,6 +5,7 @@ import 'package:shop/components/cart_button.dart';
 import 'package:shop/components/custom_modal_bottom_sheet.dart';
 import 'package:shop/components/product/product_card.dart';
 import 'package:shop/constants.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/feature_placeholder_screen.dart';
 import 'package:shop/models/product_model.dart';
 import 'package:shop/providers/product_provider.dart';
@@ -171,6 +172,10 @@ class ProductDetailsScreen extends StatelessWidget {
                         priceAfetDiscount:
                             relatedProducts[index].priceAfetDiscount,
                         dicountpercent: relatedProducts[index].dicountpercent,
+                        onAddToCart: () => addProductToCartFromCard(
+                          context,
+                          relatedProducts[index],
+                        ),
                         press: () {
                           Navigator.pushReplacementNamed(
                             context,

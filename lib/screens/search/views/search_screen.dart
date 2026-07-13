@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shop/components/product/product_card.dart';
 import 'package:shop/constants.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/app_loading_indicator.dart';
 import 'package:shop/models/product_model.dart';
 import 'package:shop/providers/product_provider.dart';
@@ -114,6 +115,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     onToggleSaved: () {
                       context.read<ProductProvider>().toggleBookmark(product);
                     },
+                    onAddToCart: () =>
+                        addProductToCartFromCard(context, product),
                     press: () {
                       Navigator.pushNamed(
                         context,

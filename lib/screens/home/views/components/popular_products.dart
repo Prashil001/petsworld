@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shop/components/product/product_card.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/section_empty_state.dart';
 import 'package:shop/providers/product_provider.dart';
 import 'package:shop/route/screen_export.dart';
@@ -8,9 +9,7 @@ import 'package:shop/route/screen_export.dart';
 import '../../../../constants.dart';
 
 class PopularProducts extends StatelessWidget {
-  const PopularProducts({
-    super.key,
-  });
+  const PopularProducts({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +72,7 @@ class PopularProducts extends StatelessWidget {
                   onToggleSaved: () {
                     context.read<ProductProvider>().toggleBookmark(product);
                   },
+                  onAddToCart: () => addProductToCartFromCard(context, product),
                   press: () {
                     Navigator.pushNamed(
                       context,

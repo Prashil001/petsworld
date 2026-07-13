@@ -313,7 +313,7 @@ class _OrderCard extends StatelessWidget {
 
     final provider = context.read<OrderProvider>();
     final message = result == null
-        ? provider.errorMessage ?? 'Unable to save invoice right now.'
+        ? provider.invoiceErrorMessage ?? 'Unable to save invoice right now.'
         : result.location == null
         ? 'Invoice saved as ${result.fileName}.'
         : 'Invoice saved to ${result.location}.';

@@ -22,7 +22,7 @@ class CartPricingSummaryModel {
 
   double get totalDiscount => productDiscount + couponDiscount;
   bool get qualifiesForFreeDelivery =>
-      subtotal >= freeDeliveryThreshold || deliveryCharge <= 0;
+      freeDeliveryThreshold > 0 && subtotal >= freeDeliveryThreshold;
   double get amountLeftForFreeDelivery {
     if (qualifiesForFreeDelivery) return 0;
     final remaining = freeDeliveryThreshold - subtotal;

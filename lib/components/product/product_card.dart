@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../constants.dart';
@@ -14,6 +17,7 @@ class ProductCard extends StatelessWidget {
     this.dicountpercent,
     this.isSaved = false,
     this.onToggleSaved,
+    this.onAddToCart,
     required this.press,
   });
   final String image, brandName, title;
@@ -22,15 +26,23 @@ class ProductCard extends StatelessWidget {
   final int? dicountpercent;
   final bool isSaved;
   final VoidCallback? onToggleSaved;
+  final FutureOr<bool> Function()? onAddToCart;
   final VoidCallback press;
 
   @override
   Widget build(BuildContext context) {
+    final imageKey = GlobalKey();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final secondaryText = Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.72);
-    final iconColor = Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.9);
+    final secondaryText = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.color?.withValues(alpha: 0.72);
+    final iconColor = Theme.of(
+      context,
+    ).textTheme.bodyMedium?.color?.withValues(alpha: 0.9);
     final surfaceColor = isDark ? const Color(0xFF171C26) : Colors.white;
-    final imageSurface = isDark ? const Color(0xFF111722) : const Color(0xFFF8F5EE);
+    final imageSurface = isDark
+        ? const Color(0xFF111722)
+        : const Color(0xFFF8F5EE);
 
     return Material(
       color: Colors.transparent,
@@ -58,6 +70,7 @@ class ProductCard extends StatelessWidget {
                 Expanded(
                   flex: 7,
                   child: Container(
+                    key: imageKey,
                     width: double.infinity,
                     decoration: BoxDecoration(
                       color: imageSurface,
@@ -89,14 +102,18 @@ class ProductCard extends StatelessWidget {
                                 height: 32,
                                 decoration: BoxDecoration(
                                   color: isDark
-                                      ? const Color(0xFF262B36).withValues(alpha: 0.96)
+                                      ? const Color(
+                                          0xFF262B36,
+                                        ).withValues(alpha: 0.96)
                                       : Colors.white.withValues(alpha: 0.94),
                                   borderRadius: const BorderRadius.all(
                                     Radius.circular(999),
                                   ),
                                 ),
                                 child: Icon(
-                                  isSaved ? Icons.bookmark : Icons.bookmark_border,
+                                  isSaved
+                                      ? Icons.bookmark
+                                      : Icons.bookmark_border,
                                   size: 17,
                                   color: isSaved
                                       ? primaryColor
@@ -128,6 +145,26 @@ class ProductCard extends StatelessWidget {
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
+                            ),
+                          ),
+                        if (onAddToCart != null)
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: _ProductCardIconButton(
+                              icon: Icons.shopping_bag_outlined,
+                              isDark: isDark,
+                              iconColor: iconColor ?? blackColor80,
+                              onTap: () async {
+                                final added = await onAddToCart!();
+                                if (added && context.mounted) {
+                                  _runCartFlyAnimation(
+                                    context: context,
+                                    sourceKey: imageKey,
+                                    imageUrl: image,
+                                  );
+                                }
+                              },
                             ),
                           ),
                       ],
@@ -198,4 +235,120 @@ class ProductCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ProductCardIconButton extends StatelessWidget {
+  const _ProductCardIconButton({
+    required this.icon,
+    required this.isDark,
+    required this.iconColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool isDark;
+  final Color iconColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isDark
+          ? const Color(0xFF262B36).withValues(alpha: 0.96)
+          : Colors.white.withValues(alpha: 0.94),
+      borderRadius: const BorderRadius.all(Radius.circular(999)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: const BorderRadius.all(Radius.circular(999)),
+        child: SizedBox(
+          width: 34,
+          height: 34,
+          child: Icon(icon, size: 18, color: iconColor),
+        ),
+      ),
+    );
+  }
+}
+
+void _runCartFlyAnimation({
+  required BuildContext context,
+  required GlobalKey sourceKey,
+  required String imageUrl,
+}) {
+  final overlay = Overlay.maybeOf(context);
+  final sourceContext = sourceKey.currentContext;
+  if (overlay == null || sourceContext == null) {
+    return;
+  }
+
+  final sourceBox = sourceContext.findRenderObject() as RenderBox?;
+  if (sourceBox == null || !sourceBox.hasSize) {
+    return;
+  }
+
+  final startRect = sourceBox.localToGlobal(Offset.zero) & sourceBox.size;
+  final screenSize = MediaQuery.sizeOf(context);
+  final start = startRect.center;
+  final target = Offset(screenSize.width * 0.625, screenSize.height - 52);
+  final startSize = startRect.shortestSide.clamp(52.0, 76.0);
+
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (context) {
+      return IgnorePointer(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 680),
+          curve: Curves.easeInOutCubic,
+          onEnd: () => entry.remove(),
+          builder: (context, value, child) {
+            final center = Offset.lerp(start, target, value)!;
+            final size = lerpDouble(startSize, 24, value)!;
+            final opacity = lerpDouble(1, 0.15, value)!;
+            return Stack(
+              children: [
+                Positioned(
+                  left: center.dx - size / 2,
+                  top: center.dy - size / 2,
+                  width: size,
+                  height: size,
+                  child: Opacity(
+                    opacity: opacity,
+                    child: Transform.scale(
+                      scale: lerpDouble(1, 0.8, value)!,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.18),
+                              blurRadius: 18,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(Icons.shopping_bag_outlined);
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    },
+  );
+
+  overlay.insert(entry);
 }

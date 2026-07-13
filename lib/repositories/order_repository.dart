@@ -42,82 +42,12 @@ class FirestoreOrderRepository implements OrderRepository {
 
     payload['updatedAt'] = FieldValue.serverTimestamp();
     payload['timestamp'] = FieldValue.serverTimestamp();
+    payload.remove('stockDecremented');
     if (order.createdAt == null) {
       payload['createdAt'] = FieldValue.serverTimestamp();
     }
-    // The transaction below decrements stock for each item, so mark the
-    // order as decremented. Cancel flows read this flag to know whether
-    // to restore stock.
-    payload['stockDecremented'] = true;
 
-    await _db.runTransaction((transaction) async {
-      for (final item in normalizedOrder.items) {
-        final productId = item.productId.trim();
-        if (productId.isEmpty) {
-          throw StateError('One of the order items is missing a product id.');
-        }
-
-        final productRef = _db.collection('products').doc(productId);
-        final productSnapshot = await transaction.get(productRef);
-        if (!productSnapshot.exists) {
-          throw StateError('Product not found for item: ${item.productName}.');
-        }
-
-        final product = ProductModel.fromMap(
-          productSnapshot.id,
-          productSnapshot.data() ?? <String, dynamic>{},
-        );
-        if (product.packOptions.isNotEmpty) {
-          final optionIndex = product.packOptions.indexWhere(
-            (option) => option.id == item.selectedOptionId,
-          );
-          if (optionIndex == -1) {
-            throw StateError(
-              'Selected pack is no longer available for ${item.productName}.',
-            );
-          }
-
-          final option = product.packOptions[optionIndex];
-          if (option.stockQuantity < item.quantity) {
-            throw StateError(
-              'Only ${option.stockQuantity} pack(s) left for ${item.name}.',
-            );
-          }
-
-          final updatedOptions = product.packOptions.toList();
-          updatedOptions[optionIndex] = option.copyWith(
-            stockQuantity: option.stockQuantity - item.quantity,
-          );
-          final updatedProduct = product.copyWith(
-            packOptions: updatedOptions,
-            stockQuantity: _updatedProductPrimaryStock(updatedOptions),
-          );
-
-          transaction.update(productRef, <String, dynamic>{
-            'packOptions': updatedOptions
-                .map((option) => option.toMap())
-                .toList(),
-            'stockQuantity': updatedProduct.stockQuantity,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-          continue;
-        }
-
-        final currentStock = product.stockQuantity;
-        if (currentStock < item.quantity) {
-          throw StateError(
-            'Only $currentStock item(s) left in stock for ${item.productName}.',
-          );
-        }
-
-        transaction.update(productRef, <String, dynamic>{
-          'stockQuantity': currentStock - item.quantity,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      transaction.set(docRef, payload, SetOptions(merge: true));
-    });
+    await docRef.set(payload, SetOptions(merge: true));
   }
 
   @override

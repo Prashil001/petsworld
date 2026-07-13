@@ -50,7 +50,7 @@ class _EntryPointState extends State<EntryPoint> {
         initialCategoryTitle: _discoverCategoryTitle,
         filterSeed: _discoverFilterSeed,
       ),
-      const BookmarkScreen(),
+      const CartScreen(),
       const ProfileScreen(),
     ];
 
@@ -178,14 +178,14 @@ class _EntryPointState extends State<EntryPoint> {
                       ),
                       NavigationDestination(
                         icon: svgIcon(
-                          "assets/icons/Bookmark.svg",
+                          "assets/icons/Bag.svg",
                           color: isDark ? Colors.white70 : Colors.black54,
                         ),
                         selectedIcon: svgIcon(
-                          "assets/icons/Bookmark.svg",
+                          "assets/icons/Bag.svg",
                           color: Colors.white,
                         ),
-                        label: "Saved",
+                        label: "Cart",
                       ),
                       NavigationDestination(
                         icon: svgIcon(
@@ -228,7 +228,7 @@ class _BrandHeader extends StatelessWidget {
     final subtitles = <String>[
       'Wellness curated for playful paws',
       'Browse care by category',
-      'Your saved essentials',
+      'Your cart essentials',
       'Profile and preferences',
     ];
     return Row(

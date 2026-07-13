@@ -6,6 +6,7 @@ import 'package:shop/components/home_banner_card.dart';
 import 'package:shop/components/network_image_with_loader.dart';
 import 'package:shop/components/product/product_card.dart';
 import 'package:shop/constants.dart';
+import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/app_loading_indicator.dart';
 import 'package:shop/core/widgets/section_empty_state.dart';
 import 'package:shop/models/category_model.dart';
@@ -89,323 +90,337 @@ class _HomeScreenState extends State<HomeScreen> {
       child: isInitialLoading
           ? const AppLoadingIndicator(message: 'Loading your pet store...')
           : CustomScrollView(
-        slivers: <Widget>[
-          // ── Search + Cart ──────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                defaultPadding,
-                defaultPadding,
-                defaultPadding,
-                defaultPadding,
-              ),
-              child: _SearchStrip(
-                onOpenCart: () => Navigator.pushNamed(context, cartScreenRoute),
-              ),
-            ),
-          ),
-
-          // ── Banner carousel ────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                defaultPadding,
-                0,
-                defaultPadding,
-                defaultPadding,
-              ),
-              child: const _DeliveryHighlightCard(),
-            ),
-          ),
-          if (banners.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  defaultPadding,
-                  0,
-                  defaultPadding,
-                  defaultPadding * 1.5,
-                ),
-                child: _BannerCarousel(
-                  banners: banners,
-                  controller: _bannerController,
-                  currentIndex: _currentBannerIndex,
-                  onPageChanged: (index) {
-                    if (_currentBannerIndex == index) return;
-                    setState(() => _currentBannerIndex = index);
-                  },
-                  onTapBanner: (banner) => _handleBannerTap(context, banner),
-                ),
-              ),
-            ),
-
-          for (final section in homeSections)
-            if (productProvider.productsForHomeSection(section).isNotEmpty)
-              SliverToBoxAdapter(
-                child: _ProductRailSection(
-                  title: section.title,
-                  leading: const Icon(
-                    Icons.local_offer_outlined,
-                    color: accentColor,
-                    size: 18,
-                  ),
-                  badge: section.hasSectionDiscount
-                      ? section.sectionDiscountType ==
-                                CouponDiscountType.flatAmount
-                            ? 'SAVE Rs ${section.sectionDiscountValue?.toStringAsFixed(0) ?? '0'}'
-                            : '${section.sectionDiscountValue?.toStringAsFixed(0) ?? '0'}% OFF'
-                      : null,
-                  badgeColor: dealBadgeBg,
-                  badgeTextColor: dealBadgeText,
-                  actionText: 'Shop all',
-                  products: productProvider.productsForHomeSection(section),
-                  onTapAction: () => _openDiscover(context),
-                ),
-              ),
-
-          // ── Shop by pet ────────────────────────────────────────────────
-          if (categories.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  defaultPadding,
-                  0,
-                  defaultPadding,
-                  defaultPadding * 1.5,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Minimal section label
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Shop by pet',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        GestureDetector(
-                          onTap: () => _openDiscover(context),
-                          child: Text(
-                            'See all',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: primaryColor,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ),
-                      ],
+              slivers: <Widget>[
+                // ── Search + Cart ──────────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      defaultPadding,
+                      defaultPadding,
+                      defaultPadding,
+                      defaultPadding,
                     ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      height: 152,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: categories.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 12),
-                        itemBuilder: (context, index) {
-                          final category = categories[index];
-                          return _CategoryAvatarItem(
-                            category: category,
-                            onTap: () => _openCategory(context, category.title),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── New arrivals ───────────────────────────────────────────────
-          if (newArrivals.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _ProductRailSection(
-                title: 'New arrivals',
-                leading: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: primaryColor,
-                  size: 18,
-                ),
-                actionText: 'See all',
-                products: newArrivals,
-                onTapAction: () => _openDiscover(context),
-              ),
-            ),
-
-          // ── Deals of the week ──────────────────────────────────────────
-          if (flashSaleProducts.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _ProductRailSection(
-                title: 'Deals of the week',
-                leading: const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: accentColor,
-                  size: 18,
-                ),
-                badge: 'HOT',
-                badgeColor: dealBadgeBg,
-                badgeTextColor: dealBadgeText,
-                actionText: 'View deals',
-                products: flashSaleProducts,
-                onTapAction: () => _openDiscover(context),
-              ),
-            ),
-
-          // ── Best sellers ───────────────────────────────────────────────
-          if (bestSellers.isNotEmpty)
-            SliverToBoxAdapter(
-              child: _ProductRailSection(
-                title: 'Best sellers',
-                leading: const Icon(
-                  Icons.workspace_premium_rounded,
-                  color: primaryColor,
-                  size: 18,
-                ),
-                actionText: 'Shop now',
-                products: bestSellers,
-                onTapAction: () => _openDiscover(context),
-              ),
-            ),
-
-          // ── Everything in store ────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                defaultPadding,
-                defaultPadding / 2,
-                defaultPadding,
-                defaultPadding * 0.75,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Everything in store',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+                    child: _SearchStrip(
+                      onOpenCart: () =>
+                          Navigator.pushNamed(context, cartScreenRoute),
                     ),
                   ),
-                  if (!productProvider.isLoading)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: const BorderRadius.all(
-                          Radius.circular(999),
-                        ),
-                        border: Border.all(color: Theme.of(context).dividerColor),
-                      ),
-                      child: Text(
-                        '${allProducts.length}${productProvider.hasMoreProducts ? '+' : ''} items',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+                ),
 
-          if (allProducts.isEmpty)
-            const SliverToBoxAdapter(
-              child: SectionEmptyState(
-                title: 'No products yet',
-                message:
-                    'Add products in the admin panel and they will appear here automatically.',
-              ),
-            )
-          else
-            SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  Padding(
+                // ── Banner carousel ────────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
                     padding: const EdgeInsets.fromLTRB(
                       defaultPadding,
                       0,
                       defaultPadding,
                       defaultPadding,
                     ),
-                    child: GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: defaultPadding,
-                            crossAxisSpacing: defaultPadding,
-                            childAspectRatio: 0.7,
-                          ),
-                      itemCount: allProducts.length > 6
-                          ? 6
-                          : allProducts.length,
-                      itemBuilder: (context, index) {
-                        final product = allProducts[index];
-                        return ProductCard(
-                          image: product.image,
-                          brandName: product.brandName,
-                          title: product.title,
-                          price: product.price,
-                          priceAfetDiscount: product.priceAfetDiscount,
-                          dicountpercent: product.dicountpercent,
-                          isSaved: productProvider.isBookmarked(product.id),
-                          onToggleSaved: () {
-                            context.read<ProductProvider>().toggleBookmark(
-                              product,
-                            );
-                          },
-                          press: () {
-                            Navigator.pushNamed(
-                              context,
-                              productDetailsScreenRoute,
-                              arguments: product,
-                            );
-                          },
-                        );
-                      },
-                    ),
+                    child: const _DeliveryHighlightCard(),
                   ),
-                  if (allProducts.length > 6)
-                    Padding(
+                ),
+                if (banners.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
                       padding: const EdgeInsets.fromLTRB(
                         defaultPadding,
                         0,
                         defaultPadding,
                         defaultPadding * 1.5,
                       ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => _openDiscover(context),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'View More',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                      child: _BannerCarousel(
+                        banners: banners,
+                        controller: _bannerController,
+                        currentIndex: _currentBannerIndex,
+                        onPageChanged: (index) {
+                          if (_currentBannerIndex == index) return;
+                          setState(() => _currentBannerIndex = index);
+                        },
+                        onTapBanner: (banner) =>
+                            _handleBannerTap(context, banner),
                       ),
                     ),
-                ],
-              ),
+                  ),
+
+                for (final section in homeSections)
+                  if (productProvider
+                      .productsForHomeSection(section)
+                      .isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: _ProductRailSection(
+                        title: section.title,
+                        leading: const Icon(
+                          Icons.local_offer_outlined,
+                          color: accentColor,
+                          size: 18,
+                        ),
+                        badge: section.hasSectionDiscount
+                            ? section.sectionDiscountType ==
+                                      CouponDiscountType.flatAmount
+                                  ? 'SAVE Rs ${section.sectionDiscountValue?.toStringAsFixed(0) ?? '0'}'
+                                  : '${section.sectionDiscountValue?.toStringAsFixed(0) ?? '0'}% OFF'
+                            : null,
+                        badgeColor: dealBadgeBg,
+                        badgeTextColor: dealBadgeText,
+                        actionText: 'Shop all',
+                        products: productProvider.productsForHomeSection(
+                          section,
+                        ),
+                        onTapAction: () => _openDiscover(context),
+                      ),
+                    ),
+
+                // ── Shop by pet ────────────────────────────────────────────────
+                if (categories.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        defaultPadding,
+                        0,
+                        defaultPadding,
+                        defaultPadding * 1.5,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Minimal section label
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Shop by pet',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                              GestureDetector(
+                                onTap: () => _openDiscover(context),
+                                child: Text(
+                                  'See all',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: primaryColor,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            height: 152,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: categories.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 12),
+                              itemBuilder: (context, index) {
+                                final category = categories[index];
+                                return _CategoryAvatarItem(
+                                  category: category,
+                                  onTap: () =>
+                                      _openCategory(context, category.title),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // ── New arrivals ───────────────────────────────────────────────
+                if (newArrivals.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _ProductRailSection(
+                      title: 'New arrivals',
+                      leading: const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: primaryColor,
+                        size: 18,
+                      ),
+                      actionText: 'See all',
+                      products: newArrivals,
+                      onTapAction: () => _openDiscover(context),
+                    ),
+                  ),
+
+                // ── Deals of the week ──────────────────────────────────────────
+                if (flashSaleProducts.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _ProductRailSection(
+                      title: 'Deals of the week',
+                      leading: const Icon(
+                        Icons.local_fire_department_rounded,
+                        color: accentColor,
+                        size: 18,
+                      ),
+                      badge: 'HOT',
+                      badgeColor: dealBadgeBg,
+                      badgeTextColor: dealBadgeText,
+                      actionText: 'View deals',
+                      products: flashSaleProducts,
+                      onTapAction: () => _openDiscover(context),
+                    ),
+                  ),
+
+                // ── Best sellers ───────────────────────────────────────────────
+                if (bestSellers.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _ProductRailSection(
+                      title: 'Best sellers',
+                      leading: const Icon(
+                        Icons.workspace_premium_rounded,
+                        color: primaryColor,
+                        size: 18,
+                      ),
+                      actionText: 'Shop now',
+                      products: bestSellers,
+                      onTapAction: () => _openDiscover(context),
+                    ),
+                  ),
+
+                // ── Everything in store ────────────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      defaultPadding,
+                      defaultPadding / 2,
+                      defaultPadding,
+                      defaultPadding * 0.75,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Everything in store',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        if (!productProvider.isLoading)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).cardColor,
+                              borderRadius: const BorderRadius.all(
+                                Radius.circular(999),
+                              ),
+                              border: Border.all(
+                                color: Theme.of(context).dividerColor,
+                              ),
+                            ),
+                            child: Text(
+                              '${allProducts.length}${productProvider.hasMoreProducts ? '+' : ''} items',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                if (allProducts.isEmpty)
+                  const SliverToBoxAdapter(
+                    child: SectionEmptyState(
+                      title: 'No products yet',
+                      message:
+                          'Add products in the admin panel and they will appear here automatically.',
+                    ),
+                  )
+                else
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            defaultPadding,
+                            0,
+                            defaultPadding,
+                            defaultPadding,
+                          ),
+                          child: GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  mainAxisSpacing: defaultPadding,
+                                  crossAxisSpacing: defaultPadding,
+                                  childAspectRatio: 0.7,
+                                ),
+                            itemCount: allProducts.length > 6
+                                ? 6
+                                : allProducts.length,
+                            itemBuilder: (context, index) {
+                              final product = allProducts[index];
+                              return ProductCard(
+                                image: product.image,
+                                brandName: product.brandName,
+                                title: product.title,
+                                price: product.price,
+                                priceAfetDiscount: product.priceAfetDiscount,
+                                dicountpercent: product.dicountpercent,
+                                isSaved: productProvider.isBookmarked(
+                                  product.id,
+                                ),
+                                onToggleSaved: () {
+                                  context
+                                      .read<ProductProvider>()
+                                      .toggleBookmark(product);
+                                },
+                                onAddToCart: () =>
+                                    addProductToCartFromCard(context, product),
+                                press: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    productDetailsScreenRoute,
+                                    arguments: product,
+                                  );
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                        if (allProducts.length > 6)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              defaultPadding,
+                              0,
+                              defaultPadding,
+                              defaultPadding * 1.5,
+                            ),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () => _openDiscover(context),
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'View More',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 
@@ -864,6 +879,8 @@ class _ProductRailSection extends StatelessWidget {
                     onToggleSaved: () {
                       context.read<ProductProvider>().toggleBookmark(product);
                     },
+                    onAddToCart: () =>
+                        addProductToCartFromCard(context, product),
                     press: () {
                       Navigator.pushNamed(
                         context,
