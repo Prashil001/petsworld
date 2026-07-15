@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'package:shop/models/app_user_model.dart';
 import 'package:shop/repositories/auth_repository.dart';
@@ -28,7 +29,11 @@ class AuthProvider extends ChangeNotifier {
   Future<void> restoreSession() async {
     _isLoading = true;
     _errorMessage = null;
-    notifyListeners();
+    // Deferred: this runs synchronously during the provider's own lazy
+    // `create` (chained in app_scope.dart), before its InheritedElement
+    // finishes building. Notifying immediately would call markNeedsBuild
+    // on a widget still under construction.
+    Future.microtask(notifyListeners);
 
     try {
       _currentUser = await _authRepository.getCurrentUser();
@@ -76,6 +81,23 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
       _currentUser = null;
+      return true;
+    } catch (error) {
+      _errorMessage = _mapAuthError(error);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> signInWithApple() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _currentUser = await _authRepository.signInWithApple();
       return true;
     } catch (error) {
       _errorMessage = _mapAuthError(error);
@@ -200,13 +222,16 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile({required String name}) async {
+  Future<bool> updateProfile({required String name, String? email}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _currentUser = await _authRepository.updateProfile(name: name);
+      _currentUser = await _authRepository.updateProfile(
+        name: name,
+        email: email,
+      );
       return true;
     } catch (error) {
       _errorMessage = _mapAuthError(error);
@@ -263,6 +288,15 @@ class AuthProvider extends ChangeNotifier {
   }
 
   String _mapAuthError(Object error) {
+    if (error is SignInWithAppleAuthorizationException) {
+      switch (error.code) {
+        case AuthorizationErrorCode.canceled:
+          return 'Apple Sign-In was cancelled.';
+        default:
+          return 'Apple Sign-In could not be completed. Please try again.';
+      }
+    }
+
     if (error is FirebaseAuthException) {
       switch (error.code) {
         case 'invalid-email':
@@ -284,8 +318,8 @@ class AuthProvider extends ChangeNotifier {
           return 'Network issue. Please check your internet connection.';
         case 'account-exists-with-different-credential':
           return 'This account exists with a different sign-in method.';
-        case 'google-id-token-missing':
-          return 'Google Sign-In could not be completed. Please try again.';
+        case 'apple-id-token-missing':
+          return 'Apple Sign-In could not be completed. Please try again.';
         case 'invalid-phone-number':
           return 'Please enter a valid phone number with country code.';
         case 'missing-phone-number':

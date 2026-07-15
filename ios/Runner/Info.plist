@@ -58,6 +58,17 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>PetsWorld needs permission to save images to your photo library.</string>
 
+	<!-- URL scheme for Firebase Phone Auth reCAPTCHA verification redirect (derived from GOOGLE_APP_ID in GoogleService-Info.plist) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-119947379250-ios-c3a6a153f9f0e15da7722b</string>
+			</array>
+		</dict>
+	</array>
+
 	<!-- URL schemes this app is allowed to query (required for canOpenURL) -->
 	<key>LSApplicationQueriesSchemes</key>
 	<array>

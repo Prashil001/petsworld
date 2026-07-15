@@ -158,7 +158,11 @@ class ProductProvider extends ChangeNotifier {
     _lastDocument = null;
     _hasMore = true;
     _currentCategoryFilter = null;
-    notifyListeners();
+    // Deferred: this can run synchronously during the provider's own lazy
+    // `create`, before its InheritedElement finishes building. Notifying
+    // immediately would call markNeedsBuild on a widget still under
+    // construction.
+    Future.microtask(notifyListeners);
 
     try {
       final results = await Future.wait<dynamic>(<Future<dynamic>>[
