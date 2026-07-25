@@ -11,7 +11,6 @@ import 'package:shop/providers/order_provider.dart';
 import 'package:shop/providers/product_provider.dart';
 import 'package:shop/providers/theme_provider.dart';
 import 'package:shop/repositories/storefront_repository.dart';
-import 'package:shop/route/screen_export.dart';
 import 'package:shop/route/router.dart' as router;
 import 'package:shop/theme/app_theme.dart';
 
@@ -93,7 +92,9 @@ class _SessionSyncGateState extends State<_SessionSyncGate> {
       }
 
       try {
-        final settings = await context.read<StorefrontRepository>().getPaymentSettings();
+        final settings = await context
+            .read<StorefrontRepository>()
+            .getPaymentSettings();
         setRuntimePaymentSettings(settings);
       } catch (_) {
         // Use bundled fallbacks when runtime settings are unavailable.
@@ -111,10 +112,6 @@ class _SessionSyncGateState extends State<_SessionSyncGate> {
       );
     }
 
-    if (authProvider.isAuthenticated) {
-      return const EntryPoint();
-    }
-
-    return const LoginScreen();
+    return const EntryPoint();
   }
 }

@@ -5,6 +5,7 @@ import 'package:shop/components/cart_button.dart';
 import 'package:shop/components/custom_modal_bottom_sheet.dart';
 import 'package:shop/components/product/product_card.dart';
 import 'package:shop/constants.dart';
+import 'package:shop/core/utils/auth_required.dart';
 import 'package:shop/core/utils/cart_actions.dart';
 import 'package:shop/core/widgets/feature_placeholder_screen.dart';
 import 'package:shop/models/product_model.dart';
@@ -65,6 +66,12 @@ class ProductDetailsScreen extends StatelessWidget {
           ? CartButton(
               price: displayPrice,
               press: () {
+                if (!requireAuthenticatedUser(
+                  context,
+                  message: 'Please log in to add items to your cart.',
+                )) {
+                  return;
+                }
                 customModalBottomSheet(
                   context,
                   height: MediaQuery.of(context).size.height * 0.92,
@@ -82,6 +89,12 @@ class ProductDetailsScreen extends StatelessWidget {
               actions: [
                 IconButton(
                   onPressed: () async {
+                    if (!requireAuthenticatedUser(
+                      context,
+                      message: 'Please log in to save products.',
+                    )) {
+                      return;
+                    }
                     final productProvider = context.read<ProductProvider>();
                     final success = await productProvider.toggleBookmark(
                       currentProduct,

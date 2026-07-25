@@ -14,6 +14,9 @@
 # Google Sign-In
 -keep class com.google.android.gms.auth.** { *; }
 
+# Optional Play Core references from Flutter engine (not bundled in this app)
+-dontwarn com.google.android.play.core.**
+
 # image_picker / Glide
 -keep class com.bumptech.glide.** { *; }
 

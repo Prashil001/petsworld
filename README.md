@@ -134,6 +134,27 @@ flutter pub get
 - Android: add **SHA-1** and **SHA-256** for your debug + release keystores in the Firebase Console (required for Phone auth).
 - iOS: `ios/Runner/GoogleService-Info.plist` is committed; for Codemagic builds, set the `GOOGLE_SERVICE_INFO_PLIST` env var (see iOS section below).
 
+### Android Play release signing
+Google Play currently expects the Android App Bundle upload certificate SHA-1 to be:
+
+```text
+B6:0A:53:2C:27:11:18:96:28:94:75:62:56:B1:A2:5A:BA:14:1A:C2
+```
+
+Before uploading a release bundle, verify the built artifact:
+
+```powershell
+.\tool\verify_android_signing.ps1 -Bundle build\app\outputs\bundle\release\app-release.aab
+```
+
+Or verify a candidate upload keystore:
+
+```powershell
+.\tool\verify_android_signing.ps1 -Keystore path\to\upload-keystore.jks -Alias upload -PromptForPassword
+```
+
+If the SHA-1 does not match, the bundle cannot be accepted as an update for the existing Play app. Use the original upload keystore that matches the SHA-1 above, or request an upload key reset in Play Console and then update `android/key.properties` to point at the new reset upload keystore.
+
 ### 3. Cloudinary
 Edit `lib/core/config/cloudinary_config.dart` — cloud name and unsigned upload preset.
 

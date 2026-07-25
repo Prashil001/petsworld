@@ -169,8 +169,16 @@ class ProfileScreen extends StatelessWidget {
             name: displayName,
             contact: displayContact,
             isAdmin: authProvider.isAdmin,
-            onTap: () => Navigator.pushNamed(context, userInfoScreenRoute),
+            onTap: authProvider.isAuthenticated
+                ? () => Navigator.pushNamed(context, userInfoScreenRoute)
+                : () => Navigator.pushNamed(context, logInScreenRoute),
           ),
+          if (!authProvider.isAuthenticated) ...[
+            const SizedBox(height: defaultPadding),
+            _GuestAccountCard(
+              onSignIn: () => Navigator.pushNamed(context, logInScreenRoute),
+            ),
+          ],
           const SizedBox(height: defaultPadding),
           Row(
             children: [
@@ -208,17 +216,32 @@ class ProfileScreen extends StatelessWidget {
               _ActionTile(
                 title: 'Orders',
                 iconPath: 'assets/icons/Order.svg',
-                onTap: () => Navigator.pushNamed(context, ordersScreenRoute),
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  authProvider.isAuthenticated
+                      ? ordersScreenRoute
+                      : logInScreenRoute,
+                ),
               ),
               _ActionTile(
                 title: 'Saved products',
                 iconPath: 'assets/icons/Wishlist.svg',
-                onTap: () => Navigator.pushNamed(context, bookmarkScreenRoute),
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  authProvider.isAuthenticated
+                      ? bookmarkScreenRoute
+                      : logInScreenRoute,
+                ),
               ),
               _ActionTile(
                 title: 'Addresses',
                 iconPath: 'assets/icons/Address.svg',
-                onTap: () => Navigator.pushNamed(context, addressesScreenRoute),
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  authProvider.isAuthenticated
+                      ? addressesScreenRoute
+                      : logInScreenRoute,
+                ),
               ),
               _ActionTile(
                 title: 'Cart',
@@ -255,53 +278,55 @@ class ProfileScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: defaultPadding),
-          _GroupCard(
-            title: 'Account',
-            children: [
-              _DangerActionTile(
-                title: 'Delete account',
-                icon: Icons.delete_forever_outlined,
-                onTap: () => _confirmDeleteAccount(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: defaultPadding),
-          _LogoutButton(
-            isLoading: authProvider.isLoading,
-            onTap: () async {
-              final auth = context.read<AuthProvider>();
-              final cart = context.read<CartProvider>();
-              final products = context.read<ProductProvider>();
-              final orders = context.read<OrderProvider>();
+          if (authProvider.isAuthenticated) ...[
+            const SizedBox(height: defaultPadding),
+            _GroupCard(
+              title: 'Account',
+              children: [
+                _DangerActionTile(
+                  title: 'Delete account',
+                  icon: Icons.delete_forever_outlined,
+                  onTap: () => _confirmDeleteAccount(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: defaultPadding),
+            _LogoutButton(
+              isLoading: authProvider.isLoading,
+              onTap: () async {
+                final auth = context.read<AuthProvider>();
+                final cart = context.read<CartProvider>();
+                final products = context.read<ProductProvider>();
+                final orders = context.read<OrderProvider>();
 
-              await auth.signOut();
-              if (!context.mounted) return;
+                await auth.signOut();
+                if (!context.mounted) return;
 
-              if (auth.isAuthenticated) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      auth.errorMessage ??
-                          'Unable to log out right now. Please try again.',
+                if (auth.isAuthenticated) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        auth.errorMessage ??
+                            'Unable to log out right now. Please try again.',
+                      ),
                     ),
-                  ),
+                  );
+                  return;
+                }
+
+                await cart.syncForUser(null);
+                await products.syncUserData(null);
+                await orders.syncForUser(null);
+                if (!context.mounted) return;
+
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  entryPointScreenRoute,
+                  (route) => false,
                 );
-                return;
-              }
-
-              await cart.syncForUser(null);
-              await products.syncUserData(null);
-              await orders.syncForUser(null);
-              if (!context.mounted) return;
-
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                logInScreenRoute,
-                (route) => false,
-              );
-            },
-          ),
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -387,6 +412,47 @@ class ProfileScreen extends StatelessWidget {
       context,
       logInScreenRoute,
       (route) => false,
+    );
+  }
+}
+
+class _GuestAccountCard extends StatelessWidget {
+  const _GuestAccountCard({required this.onSignIn});
+
+  final VoidCallback onSignIn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(defaultPadding),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Browsing as guest',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Log in only when you want to save products, manage addresses, or check out.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: defaultPadding),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onSignIn,
+              child: const Text('Log in or create account'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

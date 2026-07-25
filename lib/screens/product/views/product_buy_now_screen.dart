@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shop/components/cart_button.dart';
 import 'package:shop/components/custom_modal_bottom_sheet.dart';
 import 'package:shop/components/network_image_with_loader.dart';
+import 'package:shop/core/utils/auth_required.dart';
 import 'package:shop/models/product_model.dart';
 import 'package:shop/providers/cart_provider.dart';
 import 'package:shop/providers/product_provider.dart';
@@ -61,6 +62,12 @@ class _ProductBuyNowScreenState extends State<ProductBuyNowScreen> {
         title: "Add to cart",
         subTitle: "Total price",
         press: () async {
+          if (!requireAuthenticatedUser(
+            context,
+            message: 'Please log in to add items to your cart.',
+          )) {
+            return;
+          }
           final messenger = ScaffoldMessenger.of(context);
           final cartProvider = context.read<CartProvider>();
           if (_availableStock <= 0) {
@@ -116,6 +123,12 @@ class _ProductBuyNowScreenState extends State<ProductBuyNowScreen> {
                 ),
                 IconButton(
                   onPressed: () async {
+                    if (!requireAuthenticatedUser(
+                      context,
+                      message: 'Please log in to save products.',
+                    )) {
+                      return;
+                    }
                     final messenger = ScaffoldMessenger.of(context);
                     final productProvider = context.read<ProductProvider>();
                     final success = await productProvider.toggleBookmark(
