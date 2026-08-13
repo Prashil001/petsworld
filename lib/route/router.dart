@@ -80,6 +80,15 @@ Route<dynamic> generateRoute(RouteSettings settings) {
           );
         },
       );
+    case otpScreenRoute:
+      return MaterialPageRoute(
+        builder: (context) {
+          final arguments = settings.arguments as Map<String, dynamic>?;
+          return PhoneOtpScreen(
+            preferredName: arguments?['preferredName'] as String?,
+          );
+        },
+      );
     case passwordRecoveryScreenRoute:
       return MaterialPageRoute(
         builder: (context) => const PasswordRecoveryScreen(),

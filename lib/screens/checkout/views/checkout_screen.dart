@@ -47,6 +47,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool _isProcessing = false;
   String? _activeRazorpayOrderId;
+  OrderModel? _activeRazorpayDraftOrder;
   bool _razorpaySessionResolved = false;
   bool _isRefreshingPaymentConfig = false;
   _CheckoutPaymentMethod _selectedPaymentMethod =
@@ -268,8 +269,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     _CheckoutPaymentMethod.razorpay;
                               });
                             },
-                            leadingIcon:
-                                Icons.account_balance_wallet_outlined,
+                            leadingIcon: Icons.account_balance_wallet_outlined,
                           ),
                           const SizedBox(height: defaultPadding / 2),
                         ],
@@ -473,9 +473,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           return;
         }
 
-        await _placeCashOnDeliveryOrder(
-          draftOrder: draftOrder,
-        );
+        await _placeCashOnDeliveryOrder(draftOrder: draftOrder);
         return;
       }
 
@@ -498,7 +496,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       _activeRazorpayOrderId = razorpayOrder.orderId;
+      _activeRazorpayDraftOrder = razorpayDraft;
       _razorpaySessionResolved = false;
+
+      await _savePendingRazorpayOrder(razorpayDraft);
 
       _razorpayService.openCheckout(
         orderId: razorpayOrder.orderId,
@@ -660,6 +661,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
     _razorpayService.dispose();
+    await _markActiveRazorpayOrderFailed();
     debugPrint(
       '[checkout] Razorpay payment failure code=${response.code} message=${response.message}',
     );
@@ -702,6 +704,41 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     await _saveOrder(order);
+  }
+
+  Future<void> _savePendingRazorpayOrder(OrderModel order) async {
+    final orderRepository = context.read<OrderRepository>();
+    final orderProvider = context.read<OrderProvider>();
+
+    await orderRepository.saveOrder(order);
+    orderProvider.addOrder(order);
+  }
+
+  Future<void> _markActiveRazorpayOrderFailed() async {
+    final draftOrder = _activeRazorpayDraftOrder;
+    if (draftOrder == null) {
+      return;
+    }
+
+    final failedOrder = draftOrder.copyWith(
+      payment: OrderPaymentModel(
+        paymentMethod: PaymentMethod.razorpay,
+        paymentStatus: PaymentStatus.failed,
+        razorpayOrderId: draftOrder.payment.razorpayOrderId,
+      ),
+      orderStatus: OrderStatus.cancelled,
+      updatedAt: DateTime.now(),
+    );
+
+    final orderRepository = context.read<OrderRepository>();
+    final orderProvider = context.read<OrderProvider>();
+
+    try {
+      await orderRepository.saveOrder(failedOrder);
+      orderProvider.addOrder(failedOrder);
+    } catch (error) {
+      debugPrint('[checkout] Failed to mark Razorpay order as failed: $error');
+    }
   }
 
   Future<void> _saveOrder(OrderModel order) async {
@@ -768,6 +805,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   void _resetRazorpaySession() {
     _activeRazorpayOrderId = null;
+    _activeRazorpayDraftOrder = null;
     _razorpaySessionResolved = false;
   }
 

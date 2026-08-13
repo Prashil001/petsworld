@@ -25,6 +25,13 @@ exports.notifyAdminOnNewOrder = onDocumentCreated(
       return;
     }
 
+    if (!shouldNotifyAdminForOrder(order)) {
+      logger.info("Admin notification delayed until payment is confirmed.", {
+        orderId: event.params.orderId,
+      });
+      return;
+    }
+
     const token = telegramBotToken.value().trim();
     const chatId = telegramChatId.value().trim();
     if (!token || !chatId) {
@@ -76,6 +83,89 @@ exports.notifyAdminOnNewOrder = onDocumentCreated(
 
     logger.info("Telegram notification sent for order.", {
       orderId: order.orderId || event.params.orderId,
+    });
+  },
+);
+
+exports.notifyAdminOnRazorpayPaymentConfirmed = onDocumentUpdated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-south1",
+    secrets: [telegramBotToken, telegramChatId],
+  },
+  async (event) => {
+    const beforeOrder = event.data?.before?.data();
+    const afterOrder = event.data?.after?.data();
+    if (!afterOrder) {
+      logger.warn("Paid order notification skipped because order data is missing.");
+      return;
+    }
+
+    if (
+      shouldNotifyAdminForOrder(beforeOrder) ||
+      !shouldNotifyAdminForOrder(afterOrder)
+    ) {
+      return;
+    }
+
+    const token = telegramBotToken.value().trim();
+    const chatId = telegramChatId.value().trim();
+    if (!token || !chatId) {
+      logger.error(
+        "Telegram paid order notification skipped because TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing.",
+      );
+      return;
+    }
+
+    const message = buildOrderMessage({
+      orderId: afterOrder.orderId || event.params.orderId,
+      customerName:
+        afterOrder.userName ||
+        afterOrder.customerName ||
+        afterOrder.deliveryAddress?.fullName,
+      phone:
+        afterOrder.userPhone ||
+        afterOrder.phoneNumber ||
+        afterOrder.deliveryAddress?.phone,
+      total: afterOrder.pricing?.totalAmount ?? afterOrder.total,
+      paymentMethod:
+        afterOrder.payment?.paymentMethod ?? afterOrder.paymentMethod,
+      paymentStatus:
+        afterOrder.payment?.paymentStatus ?? afterOrder.paymentStatus,
+      address:
+        afterOrder.deliveryAddress?.fullAddress ||
+        afterOrder.address ||
+        composeAddress(afterOrder.deliveryAddress),
+      items: Array.isArray(afterOrder.items) ? afterOrder.items : [],
+    });
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${token}/sendMessage`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      logger.error("Telegram paid order notification failed.", {
+        status: response.status,
+        body,
+      });
+      return;
+    }
+
+    logger.info("Telegram paid order notification sent for order.", {
+      orderId: afterOrder.orderId || event.params.orderId,
     });
   },
 );
@@ -180,6 +270,13 @@ exports.decrementProductStockOnNewOrder = onDocumentCreated(
       return;
     }
 
+    if (!shouldDecrementStockForOrder(order)) {
+      logger.info("Stock decrement delayed until payment is confirmed.", {
+        orderId: event.params.orderId,
+      });
+      return;
+    }
+
     if (order.stockDecremented === true) {
       logger.info("Stock decrement skipped because order was already marked.", {
         orderId: event.params.orderId,
@@ -274,6 +371,35 @@ exports.decrementProductStockOnNewOrder = onDocumentCreated(
     });
 
     logger.info("Stock decrement processed for order.", {
+      orderId: event.params.orderId,
+    });
+  },
+);
+
+exports.decrementProductStockOnPaymentConfirmed = onDocumentUpdated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-south1",
+  },
+  async (event) => {
+    const beforeOrder = event.data?.before?.data();
+    const afterOrder = event.data?.after?.data();
+    if (!afterOrder) {
+      logger.warn("Paid stock decrement skipped because order data is missing.");
+      return;
+    }
+
+    if (
+      afterOrder.stockDecremented === true ||
+      shouldDecrementStockForOrder(beforeOrder) ||
+      !shouldDecrementStockForOrder(afterOrder)
+    ) {
+      return;
+    }
+
+    await decrementStockForOrder({
+      orderRef: event.data.after.ref,
+      order: afterOrder,
       orderId: event.params.orderId,
     });
   },
@@ -384,6 +510,124 @@ exports.restoreProductStockOnOrderCancelled = onDocumentUpdated(
     });
   },
 );
+
+async function decrementStockForOrder({ orderRef, order, orderId }) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemsByProduct = groupOrderItemsByProduct(items);
+  if (itemsByProduct.size === 0) {
+    logger.warn("Stock decrement skipped because order has no valid items.", {
+      orderId,
+    });
+    return;
+  }
+
+  const db = admin.firestore();
+
+  await db.runTransaction(async (transaction) => {
+    const latestOrderSnapshot = await transaction.get(orderRef);
+    const latestOrder = latestOrderSnapshot.data();
+    if (
+      latestOrder?.stockDecremented === true ||
+      !shouldDecrementStockForOrder(latestOrder)
+    ) {
+      return;
+    }
+
+    const pendingProductUpdates = [];
+    const stockIssues = [];
+
+    for (const [productId, productItems] of itemsByProduct.entries()) {
+      const productRef = db.collection("products").doc(productId);
+      const productSnapshot = await transaction.get(productRef);
+      if (!productSnapshot.exists) {
+        stockIssues.push({
+          productId,
+          reason: "product_not_found",
+        });
+        continue;
+      }
+
+      const product = productSnapshot.data() || {};
+      const packOptions = Array.isArray(product.packOptions)
+        ? product.packOptions.map((pack) => ({ ...pack }))
+        : [];
+
+      if (packOptions.length > 0) {
+        const update = decrementPackStock({
+          product,
+          packOptions,
+          items: productItems,
+          productId,
+          stockIssues,
+        });
+        pendingProductUpdates.push([productRef, update]);
+      } else {
+        const orderedQuantity = productItems.reduce(
+          (total, item) => total + item.quantity,
+          0,
+        );
+        const currentStock = toInteger(product.stockQuantity);
+        if (currentStock < orderedQuantity) {
+          stockIssues.push({
+            productId,
+            reason: "insufficient_stock",
+            available: currentStock,
+            requested: orderedQuantity,
+          });
+        }
+
+        pendingProductUpdates.push([
+          productRef,
+          {
+            stockQuantity: Math.max(0, currentStock - orderedQuantity),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        ]);
+      }
+    }
+
+    for (const [productRef, update] of pendingProductUpdates) {
+      transaction.update(productRef, update);
+    }
+
+    transaction.update(orderRef, {
+      stockDecremented: pendingProductUpdates.length > 0,
+      stockReservationStatus:
+        stockIssues.length === 0 ? "decremented" : "decremented_with_issues",
+      stockReservationIssues: stockIssues,
+      stockUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  logger.info("Stock decrement processed for order.", {
+    orderId,
+  });
+}
+
+function shouldDecrementStockForOrder(order) {
+  if (!order) {
+    return false;
+  }
+
+  const paymentMethod = String(
+    order.payment?.paymentMethod || order.paymentMethod || "",
+  ).trim();
+  const paymentStatus = String(
+    order.payment?.paymentStatus || order.paymentStatus || "",
+  ).trim();
+  const orderStatus = String(order.orderStatus || order.status || "").trim();
+
+  if (orderStatus === "cancelled") {
+    return false;
+  }
+
+  return paymentMethod !== "razorpay" || paymentStatus === "paid";
+}
+
+function shouldNotifyAdminForOrder(order) {
+  return shouldDecrementStockForOrder(order);
+}
 
 function buildOrderMessage({
   orderId,

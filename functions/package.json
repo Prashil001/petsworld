@@ -2,11 +2,11 @@
   "name": "petsworld-functions",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "scripts": {
-    "deploy": "firebase deploy --only functions",
+    "deploy": "set FUNCTIONS_DISCOVERY_TIMEOUT=60000&& firebase deploy --only functions",
     "serve": "firebase emulators:start --only functions"
   },
   "dependencies": {
