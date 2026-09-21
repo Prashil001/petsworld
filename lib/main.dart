@@ -14,8 +14,61 @@ import 'package:shop/repositories/storefront_repository.dart';
 import 'package:shop/route/router.dart' as router;
 import 'package:shop/theme/app_theme.dart';
 
+import 'dart:ui';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Production error handling: log Flutter framework errors cleanly
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+  };
+
+  // Catch unhandled asynchronous errors
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    debugPrint('Uncaught platform error: $error\n$stack');
+    return true;
+  };
+
+  // Graceful fallback widget instead of the default grey or red error screen
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Color(0xFFD14C4C),
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Something went wrong',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Please try again later or restart the app.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  };
+
   await FirebaseBootstrap.initialize();
   runApp(const AppScope(child: MyApp()));
 }

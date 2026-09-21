@@ -3,7 +3,7 @@ description: FlutterShop is a premium E-commerce UI kit that you can use to buil
 
 publish_to: "none"
 
-version: 1.0.0+4
+version: 1.0.0+5
 
 environment:
   sdk: ">=3.8.0 <4.0.0"
