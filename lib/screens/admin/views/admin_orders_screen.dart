@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
 import 'package:shop/constants.dart';
 import 'package:shop/models/order_model.dart';
 import 'package:shop/providers/admin_provider.dart';
 import 'package:shop/providers/auth_provider.dart';
 
-class AdminOrdersScreen extends StatelessWidget {
+class AdminOrdersScreen extends StatefulWidget {
   const AdminOrdersScreen({super.key});
+
+  @override
+  State<AdminOrdersScreen> createState() => _AdminOrdersScreenState();
+}
+
+class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
+  String _selectedStatus = 'all';
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +80,13 @@ class AdminOrdersScreen extends StatelessWidget {
                   final cancelledOrders = orders
                       .where((order) => order.isCancelled)
                       .length;
+                  final filteredOrders = orders.where((order) {
+                    if (_selectedStatus == 'all') return true;
+                    if (_selectedStatus == 'open') return !order.isCompleted;
+                    if (_selectedStatus == 'delivered') return order.isDelivered;
+                    if (_selectedStatus == 'cancelled') return order.isCancelled;
+                    return true;
+                  }).toList();
 
                   return ListView(
                     padding: EdgeInsets.fromLTRB(
@@ -101,15 +114,57 @@ class AdminOrdersScreen extends StatelessWidget {
                         isWide: isWide,
                       ),
                       const SizedBox(height: 20),
-                      ...orders.map(
-                        (order) => Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _AdminOrderCard(
-                            order: order,
-                            isSaving: adminProvider.isSaving,
-                          ),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _OrderStatusFilterChip(
+                              label: 'All (${orders.length})',
+                              isSelected: _selectedStatus == 'all',
+                              onTap: () => setState(() => _selectedStatus = 'all'),
+                            ),
+                            const SizedBox(width: 8),
+                            _OrderStatusFilterChip(
+                              label: 'Open ($pendingOrders)',
+                              isSelected: _selectedStatus == 'open',
+                              onTap: () => setState(() => _selectedStatus = 'open'),
+                            ),
+                            const SizedBox(width: 8),
+                            _OrderStatusFilterChip(
+                              label: 'Delivered (${orders.where((o) => o.isDelivered).length})',
+                              isSelected: _selectedStatus == 'delivered',
+                              onTap: () => setState(() => _selectedStatus = 'delivered'),
+                            ),
+                            const SizedBox(width: 8),
+                            _OrderStatusFilterChip(
+                              label: 'Cancelled ($cancelledOrders)',
+                              isSelected: _selectedStatus == 'cancelled',
+                              onTap: () => setState(() => _selectedStatus = 'cancelled'),
+                            ),
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      if (filteredOrders.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 40),
+                          child: Center(
+                            child: Text(
+                              'No orders found for the selected filter.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        )
+                      else
+                        ...filteredOrders.map(
+                          (order) => Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _AdminOrderCard(
+                              order: order,
+                              isSaving: adminProvider.isSaving,
+                            ),
+                          ),
+                        ),
                     ],
                   );
                 },
@@ -132,6 +187,35 @@ class AdminOrdersScreen extends StatelessWidget {
         : 'Orders exported to ${result.location}.';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _OrderStatusFilterChip extends StatelessWidget {
+  const _OrderStatusFilterChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => onTap(),
+      selectedColor: theme.colorScheme.primary,
+      labelStyle: TextStyle(
+        color: isSelected
+            ? theme.colorScheme.onPrimary
+            : theme.textTheme.bodyMedium?.color,
+        fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+      ),
     );
   }
 }

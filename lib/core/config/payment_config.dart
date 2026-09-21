@@ -1,8 +1,8 @@
 import 'package:shop/models/payment_settings_model.dart';
 
-const String fallbackRazorpayKeyId = 'rzp_test_SbNb9Ak1AfEHen';
+const String fallbackRazorpayKeyId = 'rzp_live_SyPdRHQpIyZi2a';
 const String fallbackRazorpayBackendBaseUrl =
-    'https://petstore-razorpay-backend.onrender.com';
+    'https://asia-south1-pet-shop-app-ee6f2.cloudfunctions.net';
 
 final PaymentSettingsModel _defaultPaymentSettings = PaymentSettingsModel(
   keyId: const String.fromEnvironment(
@@ -56,21 +56,55 @@ bool get isOnlinePaymentEnabled =>
 bool get isOnlinePaymentAvailable =>
     currentPaymentSettings.isOnlinePaymentAvailable;
 
-String get razorpayOrderCreationUrl => _resolveBackendPath('/create-order');
+String get razorpayOrderCreationUrl {
+  if (razorpayBackendBaseUrl.contains('cloudfunctions.net')) {
+    return _resolveBackendPath('/createRazorpayOrder');
+  }
+  return _resolveBackendPath('/create-order');
+}
 
-String get razorpayPaymentVerificationUrl =>
-    _resolveBackendPath('/verify-payment');
+String get razorpayPaymentVerificationUrl {
+  if (razorpayBackendBaseUrl.contains('cloudfunctions.net')) {
+    return _resolveBackendPath('/verifyRazorpayPayment');
+  }
+  return _resolveBackendPath('/verify-payment');
+}
 
 String get codOrderCreationUrl => _resolveBackendPath('/orders');
 
 String _resolveBackendPath(String path) {
-  final baseUrl = razorpayBackendBaseUrl.trim();
+  var baseUrl = razorpayBackendBaseUrl.trim();
   if (baseUrl.isEmpty) {
     return '';
   }
 
-  final normalizedBaseUrl = baseUrl.endsWith('/')
-      ? baseUrl.substring(0, baseUrl.length - 1)
-      : baseUrl;
-  return '$normalizedBaseUrl$path';
+  // Iteratively strip known endpoint suffixes (including /api) so that URLs like
+  // "...cloudfunctions.net/api/createRazorpayOrder" or "...cloudfunctions.net/api"
+  // resolve cleanly to the root base URL "...cloudfunctions.net".
+  bool stripped;
+  do {
+    stripped = false;
+    while (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+
+    for (final suffix in [
+      '/createRazorpayOrder',
+      '/create-order',
+      '/createOrder',
+      '/verifyRazorpayPayment',
+      '/verify-payment',
+      '/verifyPayment',
+      '/orders',
+      '/api',
+    ]) {
+      if (baseUrl.toLowerCase().endsWith(suffix.toLowerCase())) {
+        baseUrl = baseUrl.substring(0, baseUrl.length - suffix.length);
+        stripped = true;
+        break;
+      }
+    }
+  } while (stripped);
+
+  return '$baseUrl$path';
 }

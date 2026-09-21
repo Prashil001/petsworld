@@ -14,19 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "119947379250-15v69g7tnnftjhvv0l64lquf9sv5mqmk.apps.googleusercontent.com",
+          "client_id": "119947379250-nu860ojtq6a4lad9vfavgpnfpkjlf1md.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.petsworld.shop",
-            "certificate_hash": "5ed0133dd1d7f2a1eaf56d4c31e4b9bec3e54105"
-          }
-        },
-        {
-          "client_id": "119947379250-rfq5mukcm9lpot6kj7ib70h8rio6neg8.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.petsworld.shop",
-            "certificate_hash": "ac5686cf9298d77cb847552b24a18ca374509247"
+            "certificate_hash": "38f0c70ea5838ef3978d03e9154b10adbe64b716"
           }
         },
         {

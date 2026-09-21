@@ -3,6 +3,11 @@ allprojects {
         google()
         mavenCentral()
     }
+    configurations.all {
+        resolutionStrategy {
+            force 'com.razorpay:checkout:1.6.40'
+        }
+    }
 }
 
 rootProject.buildDir = "../build"

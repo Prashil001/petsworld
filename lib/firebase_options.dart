@@ -57,7 +57,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBbmlg1unkeV09_qMSXXtBIBy8r_tuftq0',
-    appId: '1:119947379250:android:27bc0755d2439af2a7722b',
+    appId: '1:119947379250:android:5422b95aaebde05ea7722b',
     messagingSenderId: '119947379250',
     projectId: 'pet-shop-app-ee6f2',
     storageBucket: 'pet-shop-app-ee6f2.firebasestorage.app',

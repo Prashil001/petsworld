@@ -59,6 +59,12 @@ class CartProvider extends ChangeNotifier {
   double get productDiscount =>
       (originalSubtotal - subtotal).clamp(0.0, double.infinity).toDouble();
 
+  bool get hasOutOfStockItems =>
+      _items.any((item) => item.isOutOfStock || item.hasExceededStock);
+
+  List<CartItemModel> get invalidStockItems =>
+      _items.where((item) => item.isOutOfStock || item.hasExceededStock).toList();
+
   CartPricingSummaryModel get pricing {
     final couponDiscount = _calculateCouponDiscount(
       coupon: _appliedCoupon,
@@ -123,23 +129,15 @@ class CartProvider extends ChangeNotifier {
       _errorMessage = error.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
+      _refreshCouponState();
     }
   }
 
   Future<bool> addToCart(
     ProductModel product, {
-    required ProductOptionModel? selectedOption,
+    ProductOptionModel? selectedOption,
     int quantity = 1,
   }) async {
-    if (_userId == null || _userId!.isEmpty) {
-      _errorMessage = 'Please log in to save items to your cart.';
-      notifyListeners();
-      return false;
-    }
-
-    _errorMessage = null;
-    final previousItems = List<CartItemModel>.from(_items);
     final resolvedOption = selectedOption ?? product.defaultPackOption;
     final optionId = resolvedOption?.id ?? '';
     final optionLabel = resolvedOption?.label ?? '';
@@ -148,9 +146,32 @@ class CartProvider extends ChangeNotifier {
     final originalUnitPrice = resolvedOption?.price ?? product.price;
     final itemId =
         '${product.id}::${optionId.trim().isEmpty ? 'default' : optionId.trim()}';
-    final existingIndex = _items.indexWhere((item) => item.id == itemId);
 
-    if (existingIndex == -1) {
+    final availableStock = resolvedOption?.stockQuantity ?? product.stockQuantity;
+    if (availableStock <= 0) {
+      _errorMessage = 'This item is currently out of stock.';
+      notifyListeners();
+      return false;
+    }
+
+    final existingIndex = _items.indexWhere((item) => item.id == itemId);
+    final currentQty = existingIndex >= 0 ? _items[existingIndex].quantity : 0;
+    if (currentQty + quantity > availableStock) {
+      _errorMessage = 'Only $availableStock item(s) available in stock.';
+      notifyListeners();
+      return false;
+    }
+
+    _errorMessage = null;
+    if (existingIndex >= 0) {
+      final existingItem = _items[existingIndex];
+      _items[existingIndex] = existingItem.copyWith(
+        quantity: existingItem.quantity + quantity,
+        unitPrice: unitPrice,
+        originalUnitPrice: originalUnitPrice,
+        product: product,
+      );
+    } else {
       _items.add(
         CartItemModel(
           product: product,
@@ -161,11 +182,6 @@ class CartProvider extends ChangeNotifier {
           quantity: quantity,
         ),
       );
-    } else {
-      final existingItem = _items[existingIndex];
-      _items[existingIndex] = existingItem.copyWith(
-        quantity: existingItem.quantity + quantity,
-      );
     }
 
     notifyListeners();
@@ -175,26 +191,34 @@ class CartProvider extends ChangeNotifier {
       return true;
     } catch (error) {
       _errorMessage = error.toString();
-      _items
-        ..clear()
-        ..addAll(previousItems);
       notifyListeners();
       return false;
     }
   }
 
-  Future<bool> updateQuantity(String cartItemId, int quantity) async {
+  Future<bool> updateQuantity(
+    String cartItemId,
+    int quantity,
+  ) async {
     final index = _items.indexWhere((item) => item.id == cartItemId);
-    if (index == -1) return false;
-
-    _errorMessage = null;
-    final previousItems = List<CartItemModel>.from(_items);
-    if (quantity <= 0) {
-      _items.removeAt(index);
-    } else {
-      _items[index] = _items[index].copyWith(quantity: quantity);
+    if (index < 0) {
+      return false;
     }
 
+    if (quantity <= 0) {
+      return removeFromCart(cartItemId);
+    }
+
+    final item = _items[index];
+    final availableStock = item.availableStock;
+    if (quantity > availableStock) {
+      _errorMessage = 'Only $availableStock item(s) available in stock.';
+      notifyListeners();
+      return false;
+    }
+
+    _errorMessage = null;
+    _items[index] = item.copyWith(quantity: quantity);
     notifyListeners();
     try {
       await _persistCartItem(cartItemId);
@@ -202,18 +226,19 @@ class CartProvider extends ChangeNotifier {
       return true;
     } catch (error) {
       _errorMessage = error.toString();
-      _items
-        ..clear()
-        ..addAll(previousItems);
       notifyListeners();
       return false;
     }
   }
 
   Future<bool> removeFromCart(String cartItemId) async {
+    final index = _items.indexWhere((item) => item.id == cartItemId);
+    if (index < 0) {
+      return false;
+    }
+
     _errorMessage = null;
-    final previousItems = List<CartItemModel>.from(_items);
-    _items.removeWhere((item) => item.id == cartItemId);
+    _items.removeAt(index);
     notifyListeners();
     try {
       if (_userId != null && _userId!.isNotEmpty) {
@@ -226,18 +251,14 @@ class CartProvider extends ChangeNotifier {
       return true;
     } catch (error) {
       _errorMessage = error.toString();
-      _items
-        ..clear()
-        ..addAll(previousItems);
       notifyListeners();
       return false;
     }
   }
 
   Future<bool> clear() async {
-    _errorMessage = null;
-    final previousItems = List<CartItemModel>.from(_items);
     _items.clear();
+    _errorMessage = null;
     notifyListeners();
     try {
       if (_userId != null && _userId!.isNotEmpty) {
@@ -248,27 +269,17 @@ class CartProvider extends ChangeNotifier {
       return true;
     } catch (error) {
       _errorMessage = error.toString();
-      _items
-        ..clear()
-        ..addAll(previousItems);
       notifyListeners();
       return false;
     }
   }
 
   Future<void> _persistCartItem(String cartItemId) async {
-    final index = _items.indexWhere((item) => item.id == cartItemId);
-    if (index == -1) {
-      if (_userId != null && _userId!.isNotEmpty) {
-        await _userDataRepository.removeCartItem(
-          userId: _userId!,
-          cartItemId: cartItemId,
-        );
-      }
+    if (_userId == null || _userId!.isEmpty) {
       return;
     }
-
-    if (_userId != null && _userId!.isNotEmpty) {
+    final index = _items.indexWhere((item) => item.id == cartItemId);
+    if (index >= 0) {
       await _userDataRepository.upsertCartItem(
         userId: _userId!,
         item: _items[index],
@@ -400,6 +411,10 @@ class CartProvider extends ChangeNotifier {
     });
   }
 
+  Future<void> refreshCartStock() async {
+    await _refreshCartProductSnapshots();
+  }
+
   Future<void> _refreshCartProductSnapshots() async {
     if (_items.isEmpty) {
       return;
@@ -429,25 +444,60 @@ class CartProvider extends ChangeNotifier {
         final currentItem = _items[index];
         final latestProduct = productById[currentItem.product.id];
         if (latestProduct == null) {
+          if (currentItem.product.isActive || currentItem.product.stockQuantity > 0) {
+            _items[index] = currentItem.copyWith(
+              product: currentItem.product.copyWith(
+                isActive: false,
+                stockQuantity: 0,
+              ),
+            );
+            changed = true;
+          }
           continue;
         }
+
+        final optionId = currentItem.selectedOptionId.trim();
+        ProductOptionModel? latestOption;
+        if (optionId.isNotEmpty && optionId != 'default') {
+          for (final opt in latestProduct.packOptions) {
+            if (opt.id == optionId) {
+              latestOption = opt;
+              break;
+            }
+          }
+        }
+
+        final newUnitPrice =
+            latestOption?.effectivePrice ?? latestProduct.salePrice ?? latestProduct.price;
+        final newOriginalPrice = latestOption?.price ?? latestProduct.price;
 
         if (latestProduct.category != currentItem.product.category ||
             latestProduct.name != currentItem.product.name ||
             latestProduct.imageUrl != currentItem.product.imageUrl ||
             latestProduct.salePrice != currentItem.product.salePrice ||
-            latestProduct.price != currentItem.product.price) {
-          _items[index] = currentItem.copyWith(product: latestProduct);
+            latestProduct.price != currentItem.product.price ||
+            latestProduct.stockQuantity != currentItem.product.stockQuantity ||
+            latestProduct.isActive != currentItem.product.isActive ||
+            currentItem.unitPrice != newUnitPrice ||
+            currentItem.originalUnitPrice != newOriginalPrice) {
+          _items[index] = currentItem.copyWith(
+            product: latestProduct,
+            unitPrice: newUnitPrice,
+            originalUnitPrice: newOriginalPrice,
+          );
           changed = true;
         }
       }
 
-      if (changed && _userId != null && _userId!.isNotEmpty) {
-        for (final item in _items) {
-          await _userDataRepository.upsertCartItem(
-            userId: _userId!,
-            item: item,
-          );
+      if (changed) {
+        notifyListeners();
+        if (_userId != null && _userId!.isNotEmpty) {
+          for (final item in _items) {
+            await _userDataRepository.upsertCartItem(
+              userId: _userId!,
+              item: item,
+            );
+          }
         }
       }
     } catch (_) {

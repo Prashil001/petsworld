@@ -145,6 +145,62 @@ class CartScreen extends StatelessWidget {
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
+                                  if (item.isOutOfStock) ...[
+                                    const SizedBox(height: defaultPadding / 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .error
+                                            .withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'Out of stock',
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ] else if (item.hasExceededStock) ...[
+                                    const SizedBox(height: defaultPadding / 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            Colors.orange.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        'Only ${item.availableStock} available',
+                                        style: const TextStyle(
+                                          color: Colors.orange,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ] else if (item.availableStock <= 5) ...[
+                                    const SizedBox(height: defaultPadding / 4),
+                                    Text(
+                                      'Only ${item.availableStock} left in stock',
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: defaultPadding / 2),
                                   Row(
                                     children: [
@@ -179,7 +235,21 @@ class CartScreen extends StatelessWidget {
                                       ),
                                       _QuantityButton(
                                         icon: Icons.add,
+                                        enabled:
+                                            item.quantity < item.availableStock,
                                         onTap: () async {
+                                          if (item.quantity >=
+                                              item.availableStock) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  'Cannot add more. Only ${item.availableStock} available in stock.',
+                                                ),
+                                              ),
+                                            );
+                                            return;
+                                          }
                                           final success = await cartProvider
                                               .updateQuantity(
                                                 item.id,
@@ -268,10 +338,45 @@ class CartScreen extends StatelessWidget {
                         isBold: true,
                       ),
                       const SizedBox(height: defaultPadding),
+                      if (cartProvider.hasOutOfStockItems) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          margin: const EdgeInsets.only(bottom: defaultPadding / 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.warning_amber_rounded,
+                                size: 18,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Some items in your cart are out of stock or exceed available quantity.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, checkoutScreenRoute);
-                        },
+                        onPressed: cartProvider.hasOutOfStockItems
+                            ? null
+                            : () {
+                                Navigator.pushNamed(context, checkoutScreenRoute);
+                              },
                         child: const Text('Proceed to checkout'),
                       ),
                     ],
@@ -381,10 +486,15 @@ class _PriceRow extends StatelessWidget {
 }
 
 class _QuantityButton extends StatelessWidget {
-  const _QuantityButton({required this.icon, required this.onTap});
+  const _QuantityButton({
+    required this.icon,
+    required this.onTap,
+    this.enabled = true,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -395,10 +505,21 @@ class _QuantityButton extends StatelessWidget {
         width: 28,
         height: 28,
         decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).dividerColor),
+          color: enabled
+              ? null
+              : Theme.of(context).disabledColor.withValues(alpha: 0.08),
+          border: Border.all(
+            color: enabled
+                ? Theme.of(context).dividerColor
+                : Theme.of(context).disabledColor.withValues(alpha: 0.25),
+          ),
           borderRadius: const BorderRadius.all(Radius.circular(999)),
         ),
-        child: Icon(icon, size: 16),
+        child: Icon(
+          icon,
+          size: 16,
+          color: enabled ? null : Theme.of(context).disabledColor,
+        ),
       ),
     );
   }

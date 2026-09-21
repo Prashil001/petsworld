@@ -47,36 +47,56 @@ class PaymentVerificationService {
             headers: const <String, String>{'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 40));
 
-      final decodedBody = _decodeResponseBody(response.body);
+      final statusCode = response.statusCode;
+      final responseBody = response.body.trim();
 
       if (kDebugMode) {
         debugPrint(
-          '[payment-verification] status=${response.statusCode}',
+          '[payment-verification] status=$statusCode',
         );
       }
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
+      final isGatewayError =
+          statusCode == 502 || statusCode == 503 || statusCode == 504;
+      final isHtml = responseBody.startsWith('<') ||
+          responseBody.toLowerCase().contains('<!doctype html') ||
+          responseBody.toLowerCase().contains('<html');
+
+      if (isGatewayError || (isHtml && statusCode >= 500)) {
+        throw PaymentVerificationException(
+          message:
+              'Payment server is currently busy or starting up (Status $statusCode). Your payment was received; please allow a moment for processing.',
+          url: uri.toString(),
+          statusCode: statusCode,
+          responseBody: responseBody,
+          requestPayload: payload,
+        );
+      }
+
+      final decodedBody = _decodeResponseBody(responseBody);
+
+      if (statusCode < 200 || statusCode >= 300) {
         final backendMessage = _extractBackendMessage(decodedBody);
         throw PaymentVerificationException(
           message:
               backendMessage?.trim().isNotEmpty == true
               ? backendMessage!
-              : 'Payment verification failed with status ${response.statusCode}.',
+              : 'Payment verification failed with status $statusCode.',
           url: uri.toString(),
-          statusCode: response.statusCode,
-          responseBody: response.body,
+          statusCode: statusCode,
+          responseBody: responseBody,
           requestPayload: payload,
         );
       }
 
       if (decodedBody is! Map<String, dynamic>) {
         throw PaymentVerificationException(
-          message: 'Backend returned an invalid verification response.',
+          message: 'Backend returned an unexpected verification response format.',
           url: uri.toString(),
-          statusCode: response.statusCode,
-          responseBody: response.body,
+          statusCode: statusCode,
+          responseBody: responseBody,
           requestPayload: payload,
         );
       }
@@ -88,8 +108,8 @@ class PaymentVerificationService {
               _extractBackendMessage(decodedBody) ??
               'Payment verification failed. Please try again.',
           url: uri.toString(),
-          statusCode: response.statusCode,
-          responseBody: response.body,
+          statusCode: statusCode,
+          responseBody: responseBody,
           requestPayload: payload,
         );
       }
@@ -104,20 +124,19 @@ class PaymentVerificationService {
     } on SocketException {
       throw PaymentVerificationException(
         message:
-            'Unable to reach the payment confirmation backend at '
-            '$razorpayPaymentVerificationUrl.',
+            'Unable to reach the payment confirmation backend. Check your connection.',
         url: uri.toString(),
         requestPayload: payload,
       );
     } on TimeoutException {
       throw PaymentVerificationException(
-        message: 'The backend took too long to verify the payment.',
+        message: 'The backend took too long to verify the payment. Your payment may have already succeeded.',
         url: uri.toString(),
         requestPayload: payload,
       );
     } on FormatException {
       throw PaymentVerificationException(
-        message: 'The backend returned an invalid response.',
+        message: 'The payment server returned an unexpected response format.',
         url: uri.toString(),
         requestPayload: payload,
       );

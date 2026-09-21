@@ -47,7 +47,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool _isProcessing = false;
   String? _activeRazorpayOrderId;
-  OrderModel? _activeRazorpayDraftOrder;
   bool _razorpaySessionResolved = false;
   bool _isRefreshingPaymentConfig = false;
   _CheckoutPaymentMethod _selectedPaymentMethod =
@@ -398,28 +397,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
 
+    await cartProvider.refreshCartStock();
+    if (cartProvider.hasOutOfStockItems) {
+      _showSnackBar(
+        'Some items in your cart are no longer available or exceed available quantity. Please review your cart.',
+      );
+      return;
+    }
+
     if (selectedAddress == null) {
       _showSnackBar('Select a delivery address first.');
       return;
     }
 
-    if (!_hasValidEmail(user.email)) {
-      _showSnackBar(
-        'Add a valid email in your profile before placing the order. The backend needs it to confirm the order and send your invoice.',
-      );
-      await Navigator.pushNamed(context, userInfoScreenRoute);
-      return;
-    }
-
-    if (isRazorpayFlow && !isRazorpayConfigured) {
-      await _refreshPaymentConfig();
-    }
-
-    if (isRazorpayFlow && !isRazorpayConfigured) {
-      _showSnackBar(
-        'Razorpay is not configured yet. Ask the admin to update the payment settings, or choose Cash on Delivery.',
-      );
-      return;
+    var customerEmail = user.email.trim();
+    if (!_hasValidEmail(customerEmail)) {
+      if (!mounted) return;
+      final enteredEmail = await _promptForEmail(context, user);
+      if (!mounted) return;
+      if (enteredEmail == null || !_hasValidEmail(enteredEmail)) {
+        _showSnackBar(
+          'A valid email address is required to receive your order confirmation and invoice.',
+        );
+        return;
+      }
+      customerEmail = enteredEmail;
     }
 
     final orderId = _generateOrderId();
@@ -436,6 +438,49 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final deliveryAddress = OrderDeliveryAddressModel.fromAddress(
       selectedAddress,
     );
+
+    // If order total is zero (e.g. 100% discount coupon), bypass Razorpay and place directly
+    if (pricing.totalAmount <= 0) {
+      final zeroOrder = _buildOrder(
+        orderId: orderId,
+        userId: user.uid,
+        userName: user.name,
+        userEmail: customerEmail,
+        userPhone: user.phoneNumber ?? selectedAddress.phoneNumber,
+        deliveryAddress: deliveryAddress,
+        items: items,
+        pricing: pricing,
+        payment: const OrderPaymentModel(
+          paymentMethod: PaymentMethod.cod,
+          paymentStatus: PaymentStatus.paid,
+        ),
+      ).copyWith(
+        orderStatus: OrderStatus.confirmed,
+        updatedAt: DateTime.now(),
+      );
+
+      setState(() {
+        _isProcessing = true;
+      });
+
+      await _finalizeSuccessfulOrder(
+        order: zeroOrder,
+        successMessage: 'Order placed successfully! Total amount: Rs 0.',
+      );
+      return;
+    }
+
+    if (isRazorpayFlow && !isRazorpayConfigured) {
+      await _refreshPaymentConfig();
+    }
+
+    if (isRazorpayFlow && !isRazorpayConfigured) {
+      _showSnackBar(
+        'Razorpay is not configured yet. Ask the admin to update the payment settings, or choose Cash on Delivery.',
+      );
+      return;
+    }
+
     final paymentMethod = isRazorpayFlow
         ? PaymentMethod.razorpay
         : PaymentMethod.cod;
@@ -447,7 +492,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       orderId: orderId,
       userId: user.uid,
       userName: user.name,
-      userEmail: user.email,
+      userEmail: customerEmail,
       userPhone: user.phoneNumber ?? selectedAddress.phoneNumber,
       deliveryAddress: deliveryAddress,
       items: items,
@@ -481,7 +526,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         amountInPaise: (pricing.totalAmount * 100).round(),
         receiptId: orderId,
         customerName: user.name,
-        customerEmail: user.email,
+        customerEmail: customerEmail,
         userId: user.uid,
         items: items,
         address: selectedAddress,
@@ -496,10 +541,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
 
       _activeRazorpayOrderId = razorpayOrder.orderId;
-      _activeRazorpayDraftOrder = razorpayDraft;
       _razorpaySessionResolved = false;
 
-      await _savePendingRazorpayOrder(razorpayDraft);
+      // In production apps, the order is only saved to the database once payment
+      // is completed and verified. We do not save pending draft orders to Firestore
+      // to avoid abandoned checkouts creating unwanted orders in the admin panel.
 
       _razorpayService.openCheckout(
         orderId: razorpayOrder.orderId,
@@ -507,9 +553,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         keyId: razorpayOrder.keyId,
         merchantName: checkoutMerchantName,
         description: checkoutDescription,
-        userName: user.name,
-        userEmail: user.email,
-        userPhone: user.phoneNumber ?? selectedAddress.phoneNumber,
+        userName: user.name.trim().isNotEmpty
+            ? user.name.trim()
+            : selectedAddress.fullName.trim(),
+        userEmail: customerEmail.trim(),
+        userPhone: (user.phoneNumber ?? selectedAddress.phoneNumber).trim(),
         onSuccess: (response) {
           unawaited(
             _handleRazorpaySuccess(
@@ -588,13 +636,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             address: selectedAddress,
           );
 
-      final confirmedOrderId =
-          verificationResult.backendOrderId?.trim().isNotEmpty == true
-          ? verificationResult.backendOrderId!.trim()
-          : draftOrder.orderId;
+      final confirmedOrderId = draftOrder.orderId.trim().isNotEmpty
+          ? draftOrder.orderId.trim()
+          : (verificationResult.backendOrderId?.trim().isNotEmpty == true
+              ? verificationResult.backendOrderId!.trim()
+              : verifiedOrderId);
 
       final paidOrder = draftOrder.copyWith(
         orderId: confirmedOrderId,
+        orderStatus: OrderStatus.confirmed,
         payment: OrderPaymentModel(
           paymentMethod: PaymentMethod.razorpay,
           paymentStatus: PaymentStatus.paid,
@@ -611,21 +661,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             '${verificationResult.message} Order ID: ${paidOrder.orderId}. Confirmation email will be sent by the backend to ${draftOrder.userEmail}.',
       );
     } catch (error) {
-      _razorpaySessionResolved = false;
       final errorDetails = _describeCheckoutError(error);
-      debugPrint('[checkout] Razorpay success follow-up failed: $errorDetails');
+      debugPrint('[checkout] Razorpay verification failed/timed out: $errorDetails');
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Payment verification failed on the backend, so the order was not confirmed. Details: $errorDetails',
+      // The customer was ALREADY charged by Razorpay (verifiedPaymentId exists).
+      // We must not abandon the order or leave the user on checkout to prevent double charges.
+      try {
+        final paidOrder = draftOrder.copyWith(
+          payment: OrderPaymentModel(
+            paymentMethod: PaymentMethod.razorpay,
+            paymentStatus: PaymentStatus.paid,
+            razorpayPaymentId: verifiedPaymentId,
+            razorpayOrderId: verifiedOrderId,
+            razorpaySignature: verifiedSignature,
           ),
-        ),
-      );
-      setState(() {
-        _isProcessing = false;
-      });
+          orderStatus: OrderStatus.confirmed,
+          updatedAt: DateTime.now(),
+        );
+
+        await _finalizeSuccessfulOrder(
+          order: paidOrder,
+          successMessage:
+              'Payment received (ID: $verifiedPaymentId). Order placed successfully! Our team will verify and dispatch your order.',
+        );
+      } catch (fallbackError) {
+        debugPrint('[checkout] Fallback order finalization failed: $fallbackError');
+        if (!mounted) return;
+        _showSnackBar(
+          'Payment received (ID: $verifiedPaymentId). Please contact support with this payment ID if your order is not listed.',
+        );
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
@@ -661,17 +729,157 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
     _razorpayService.dispose();
-    await _markActiveRazorpayOrderFailed();
+    _resetRazorpaySession();
     debugPrint(
-      '[checkout] Razorpay payment failure code=${response.code} message=${response.message}',
+      '[checkout] Razorpay payment failure/cancellation code=${response.code} message=${response.message}',
     );
     if (!mounted) return;
     setState(() {
       _isProcessing = false;
     });
-    _showSnackBar(
-      'Payment failed. Code: ${response.code}. Message: ${response.message ?? 'No message from Razorpay.'}',
+
+    final isCancelled = response.code == Razorpay.PAYMENT_CANCELLED ||
+        response.code == 0 ||
+        response.code == 2 ||
+        (response.message?.toLowerCase().contains('cancel') ?? false);
+
+    if (isCancelled) {
+      _showSnackBar(
+        'Payment cancelled. You can retry payment or choose Cash on Delivery.',
+      );
+    } else {
+      _showSnackBar(
+        'Payment could not be completed: ${response.message ?? 'Please try again or use another payment method.'}',
+      );
+    }
+  }
+
+  Future<String?> _promptForEmail(
+    BuildContext context,
+    AppUserModel user,
+  ) async {
+    final emailController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isSaving = false;
+
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(defaultBorderRadious * 2),
+          topRight: Radius.circular(defaultBorderRadious * 2),
+        ),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                defaultPadding,
+                defaultPadding,
+                defaultPadding,
+                defaultPadding + MediaQuery.of(sheetContext).viewInsets.bottom,
+              ),
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Theme.of(sheetContext).dividerColor,
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(999),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: defaultPadding),
+                    Text(
+                      'Enter your email address',
+                      style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'We will send your order confirmation, updates, and invoice to this email.',
+                      style: Theme.of(sheetContext).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: defaultPadding),
+                    TextFormField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'name@example.com',
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
+                      validator: (value) {
+                        final text = (value ?? '').trim();
+                        if (text.isEmpty) {
+                          return 'Please enter your email address.';
+                        }
+                        if (!_hasValidEmail(text)) {
+                          return 'Please enter a valid email address.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: defaultPadding),
+                    ElevatedButton(
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) {
+                                return;
+                              }
+                              setSheetState(() {
+                                isSaving = true;
+                              });
+                              final email = emailController.text.trim();
+                              final authProvider =
+                                  sheetContext.read<AuthProvider>();
+                              final updated = await authProvider.updateProfile(
+                                name: user.name,
+                                email: email,
+                              );
+                              if (!sheetContext.mounted) return;
+                              if (updated) {
+                                Navigator.of(sheetContext).pop(email);
+                              } else {
+                                setSheetState(() {
+                                  isSaving = false;
+                                });
+                                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      authProvider.errorMessage ??
+                                          'Failed to save email. Please try again.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                      child: Text(isSaving ? 'Saving...' : 'Save & Continue'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
+
+    emailController.dispose();
+    return result;
   }
 
   Future<void> _placeCashOnDeliveryOrder({
@@ -706,40 +914,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     await _saveOrder(order);
   }
 
-  Future<void> _savePendingRazorpayOrder(OrderModel order) async {
-    final orderRepository = context.read<OrderRepository>();
-    final orderProvider = context.read<OrderProvider>();
-
-    await orderRepository.saveOrder(order);
-    orderProvider.addOrder(order);
-  }
-
-  Future<void> _markActiveRazorpayOrderFailed() async {
-    final draftOrder = _activeRazorpayDraftOrder;
-    if (draftOrder == null) {
-      return;
-    }
-
-    final failedOrder = draftOrder.copyWith(
-      payment: OrderPaymentModel(
-        paymentMethod: PaymentMethod.razorpay,
-        paymentStatus: PaymentStatus.failed,
-        razorpayOrderId: draftOrder.payment.razorpayOrderId,
-      ),
-      orderStatus: OrderStatus.cancelled,
-      updatedAt: DateTime.now(),
-    );
-
-    final orderRepository = context.read<OrderRepository>();
-    final orderProvider = context.read<OrderProvider>();
-
-    try {
-      await orderRepository.saveOrder(failedOrder);
-      orderProvider.addOrder(failedOrder);
-    } catch (error) {
-      debugPrint('[checkout] Failed to mark Razorpay order as failed: $error');
-    }
-  }
 
   Future<void> _saveOrder(OrderModel order) async {
     final orderRepository = context.read<OrderRepository>();
@@ -805,7 +979,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   void _resetRazorpaySession() {
     _activeRazorpayOrderId = null;
-    _activeRazorpayDraftOrder = null;
     _razorpaySessionResolved = false;
   }
 

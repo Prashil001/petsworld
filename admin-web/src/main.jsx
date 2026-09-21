@@ -404,7 +404,21 @@ function Dashboard({ data, setToast }) {
 }
 
 function Orders({ data, refresh, setToast }) {
+  const [selectedStatus, setSelectedStatus] = useState('all');
   const stats = buildStats(data);
+
+  const filteredOrders = useMemo(() => {
+    if (selectedStatus === 'all') return data.orders;
+    if (selectedStatus === 'open') {
+      return data.orders.filter((o) =>
+        ['placed', 'confirmed', 'shipped'].includes(o.orderStatus || o.status || 'placed'),
+      );
+    }
+    return data.orders.filter(
+      (o) => (o.orderStatus || o.status || 'placed') === selectedStatus,
+    );
+  }, [data.orders, selectedStatus]);
+
   return (
     <CrudPage
       title="Orders"
@@ -417,10 +431,38 @@ function Orders({ data, refresh, setToast }) {
         <Metric label="Cancelled" value={stats.cancelledOrders} detail="Locked orders" icon={X} tone="rose" />
         <Metric label="Delivered revenue" value={money(stats.deliveredRevenue)} detail={`${stats.deliveredOrders} delivered`} icon={FileText} tone="green" />
       </div>
+
+      <div style={{ display: 'flex', gap: '8px', margin: '18px 0', overflowX: 'auto', paddingBottom: '4px' }}>
+        {[
+          { id: 'all', label: `All (${data.orders.length})` },
+          { id: 'open', label: `Open (${stats.openOrders})` },
+          { id: 'delivered', label: `Delivered (${stats.deliveredOrders})` },
+          { id: 'cancelled', label: `Cancelled (${stats.cancelledOrders})` },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setSelectedStatus(tab.id)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: '1px solid ' + (selectedStatus === tab.id ? '#7c3aed' : 'rgba(255,255,255,0.15)'),
+              background: selectedStatus === tab.id ? '#7c3aed' : 'transparent',
+              color: '#fff',
+              fontSize: '13px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="order-list">
-        {data.orders.length ? data.orders.map((order) => (
+        {filteredOrders.length ? filteredOrders.map((order) => (
           <OrderDetailCard key={order.id} order={order} refresh={refresh} setToast={setToast} />
-        )) : <div className="empty-state">No orders yet.</div>}
+        )) : <div className="empty-state">No orders found in this view.</div>}
       </div>
     </CrudPage>
   );
@@ -496,6 +538,9 @@ function OrderDetailCard({ order, refresh, setToast }) {
             {['placed', 'confirmed', 'shipped', 'delivered', 'cancelled'].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
+        <button className="danger" onClick={() => removeDoc('orders', order.id, refresh, setToast)}>
+          <Trash2 size={16} /> Delete
+        </button>
         {locked ? <p>Delivered and cancelled orders are locked to protect reporting accuracy.</p> : null}
       </div>
     </article>
@@ -508,6 +553,57 @@ function InfoBlock({ title, rows }) {
 
 function Products({ data, refresh, setToast }) {
   const [form, setForm] = useState(initialForms.product);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [search, setSearch] = useState('');
+
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    (data.products || []).forEach((p) => {
+      const cat = (p.category || 'Uncategorized').trim();
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [data.products]);
+
+  const categories = useMemo(() => {
+    return Object.keys(categoryCounts).sort((a, b) => {
+      if (a === 'Uncategorized') return 1;
+      if (b === 'Uncategorized') return -1;
+      return a.localeCompare(b);
+    });
+  }, [categoryCounts]);
+
+  const filtered = useMemo(() => {
+    let list = data.products || [];
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          (p.name || '').toLowerCase().includes(q) ||
+          (p.brandName || '').toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q),
+      );
+    }
+    if (selectedCategory !== 'all') {
+      list = list.filter(
+        (p) =>
+          (p.category || 'Uncategorized').trim().toLowerCase() ===
+          selectedCategory.toLowerCase(),
+      );
+    }
+    return list;
+  }, [data.products, search, selectedCategory]);
+
+  const grouped = useMemo(() => {
+    const map = {};
+    filtered.forEach((p) => {
+      const cat = (p.category || 'Uncategorized').trim();
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(p);
+    });
+    return map;
+  }, [filtered]);
+
   return (
     <CrudPage title="Products" subtitle="Add, edit, hide, feature, and price catalog items.">
       <EditorPanel title={form.id ? 'Edit product' : 'Add product'} onReset={() => setForm(initialForms.product)} onSave={() => saveProduct(form, refresh, setToast, setForm)}>
@@ -533,14 +629,105 @@ function Products({ data, refresh, setToast }) {
           <Toggle label="New arrival" checked={form.isNewArrival} onChange={(isNewArrival) => setForm({ ...form, isNewArrival })} />
         </FormGrid>
       </EditorPanel>
-      <CardGrid>
-        {data.products.map((p) => (
-          <RecordCard key={p.id} title={p.name || 'Untitled'} image={p.imageUrl} meta={[p.category || 'Unassigned', money(p.price), p.isActive ? 'Active' : 'Hidden']}>
-            <button onClick={() => setForm(productToForm(p))}>Edit</button>
-            <button className="danger" onClick={() => removeDoc('products', p.id, refresh, setToast)}>Delete</button>
-          </RecordCard>
-        ))}
-      </CardGrid>
+
+      {/* Category filter bar and search */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '24px 0 16px' }}>
+        <input
+          type="text"
+          placeholder="Search products by name, brand, or category..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            padding: '10px 14px',
+            borderRadius: '10px',
+            border: '1px solid rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.05)',
+            color: '#fff',
+            fontSize: '14px',
+            width: '100%',
+            boxSizing: 'border-box',
+          }}
+        />
+        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px' }}>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('all')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '20px',
+              border: '1px solid ' + (selectedCategory === 'all' ? '#7c3aed' : 'rgba(255,255,255,0.15)'),
+              background: selectedCategory === 'all' ? '#7c3aed' : 'transparent',
+              color: '#fff',
+              fontSize: '13px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            All ({(data.products || []).length})
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: '1px solid ' + (selectedCategory.toLowerCase() === cat.toLowerCase() ? '#7c3aed' : 'rgba(255,255,255,0.15)'),
+                background: selectedCategory.toLowerCase() === cat.toLowerCase() ? '#7c3aed' : 'transparent',
+                color: '#fff',
+                fontSize: '13px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {cat} ({categoryCounts[cat]})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grouped Products */}
+      {Object.keys(grouped).length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>No products match your search or filter.</div>
+      ) : (
+        Object.entries(grouped).map(([categoryName, products]) => (
+          <div key={categoryName} style={{ marginBottom: '28px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '8px 12px',
+              background: 'rgba(124, 58, 237, 0.08)',
+              borderLeft: '4px solid #7c3aed',
+              borderRadius: '4px',
+              marginBottom: '14px',
+            }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#fff' }}>
+                📁 {categoryName}
+              </h3>
+              <span style={{
+                background: 'rgba(124, 58, 237, 0.25)',
+                color: '#c4b5fd',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: 600,
+              }}>
+                {products.length} {products.length === 1 ? 'item' : 'items'}
+              </span>
+            </div>
+            <CardGrid>
+              {products.map((p) => (
+                <RecordCard key={p.id} title={p.name || 'Untitled'} image={p.imageUrl} meta={[p.category || 'Unassigned', money(p.price), p.isActive ? 'Active' : 'Hidden']}>
+                  <button onClick={() => setForm(productToForm(p))}>Edit</button>
+                  <button className="danger" onClick={() => removeDoc('products', p.id, refresh, setToast)}>Delete</button>
+                </RecordCard>
+              ))}
+            </CardGrid>
+          </div>
+        ))
+      )}
     </CrudPage>
   );
 }

@@ -85,7 +85,9 @@ Route<dynamic> generateRoute(RouteSettings settings) {
         builder: (context) {
           final arguments = settings.arguments as Map<String, dynamic>?;
           return PhoneOtpScreen(
+            phoneNumber: arguments?['phoneNumber'] as String?,
             preferredName: arguments?['preferredName'] as String?,
+            isSignUp: arguments?['isSignUp'] == true,
           );
         },
       );

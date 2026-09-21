@@ -28,6 +28,24 @@ class CartItemModel {
       ? product.name
       : '${product.name} (${selectedOptionLabel.trim()})';
 
+  int get availableStock {
+    if (!product.isActive) {
+      return 0;
+    }
+    final optionId = selectedOptionId.trim();
+    if (optionId.isNotEmpty && optionId != 'default') {
+      for (final option in product.packOptions) {
+        if (option.id == optionId) {
+          return option.stockQuantity;
+        }
+      }
+    }
+    return product.stockQuantity;
+  }
+
+  bool get isOutOfStock => availableStock <= 0;
+  bool get hasExceededStock => quantity > availableStock;
+
   CartItemModel copyWith({
     ProductModel? product,
     String? selectedOptionId,

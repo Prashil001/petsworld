@@ -21,6 +21,9 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   String _searchQuery = '';
   bool _stockFilterEnabled = false;
   int _maxStockValue = 0;
+  String _selectedMajorCategory = 'all';
+  String? _selectedSubCategory;
+  final Set<String> _collapsedCategories = <String>{};
 
   @override
   void dispose() {
@@ -32,6 +35,33 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
   /// has pack options, otherwise the simple stockQuantity field.
   int _effectiveStock(ProductModel p) =>
       p.packOptions.isEmpty ? p.stockQuantity : p.totalPackStock;
+
+  String _getMajorCategory(ProductModel p) {
+    final cat =
+        p.categoryName.trim().isEmpty ? 'Uncategorized' : p.categoryName.trim();
+    if (cat.contains('>')) {
+      return cat.split('>').first.trim();
+    }
+    return cat;
+  }
+
+  String _getSubCategory(ProductModel p) {
+    final cat =
+        p.categoryName.trim().isEmpty ? 'Uncategorized' : p.categoryName.trim();
+    if (cat.contains('>')) {
+      final parts = cat.split('>');
+      if (parts.length > 1) {
+        return parts.sublist(1).join('>').trim();
+      }
+    }
+    return '';
+  }
+
+  String _getFullCategory(ProductModel p) {
+    return p.categoryName.trim().isEmpty
+        ? 'Uncategorized'
+        : p.categoryName.trim();
+  }
 
   List<ProductModel> _applyFilters(List<ProductModel> source) {
     var list = source;
@@ -47,6 +77,20 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
 
     if (_stockFilterEnabled) {
       list = list.where((p) => _effectiveStock(p) <= _maxStockValue).toList();
+    }
+
+    if (_selectedMajorCategory != 'all') {
+      list = list.where((p) {
+        return _getMajorCategory(p).toLowerCase() ==
+            _selectedMajorCategory.toLowerCase();
+      }).toList();
+    }
+
+    if (_selectedSubCategory != null && _selectedSubCategory!.isNotEmpty) {
+      list = list.where((p) {
+        return _getSubCategory(p).toLowerCase() ==
+            _selectedSubCategory!.toLowerCase();
+      }).toList();
     }
 
     return list;
@@ -181,7 +225,47 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
 
     final allProducts = adminProvider.products;
     final filtered = _applyFilters(allProducts);
-    final hasActiveFilter = _searchQuery.trim().isNotEmpty || _stockFilterEnabled;
+
+    // Compute major category counts across allProducts
+    final majorCategoryCounts = <String, int>{};
+    for (final p in allProducts) {
+      final major = _getMajorCategory(p);
+      majorCategoryCounts[major] = (majorCategoryCounts[major] ?? 0) + 1;
+    }
+    final sortedMajorCategories = majorCategoryCounts.keys.toList()
+      ..sort((a, b) {
+        if (a == 'Uncategorized') return 1;
+        if (b == 'Uncategorized') return -1;
+        return a.compareTo(b);
+      });
+
+    // Compute subcategories if a major category is selected
+    final subCategoryCounts = <String, int>{};
+    if (_selectedMajorCategory != 'all') {
+      for (final p in allProducts) {
+        if (_getMajorCategory(p).toLowerCase() ==
+            _selectedMajorCategory.toLowerCase()) {
+          final sub = _getSubCategory(p);
+          if (sub.isNotEmpty) {
+            subCategoryCounts[sub] = (subCategoryCounts[sub] ?? 0) + 1;
+          }
+        }
+      }
+    }
+    final sortedSubCategories = subCategoryCounts.keys.toList()..sort();
+
+    // Group filtered products by their full category (e.g. Dogs > Toys)
+    final categoryGroups = <String, List<ProductModel>>{};
+    for (final p in filtered) {
+      final cat = _getFullCategory(p);
+      categoryGroups.putIfAbsent(cat, () => []).add(p);
+    }
+    final sortedGroupKeys = categoryGroups.keys.toList()
+      ..sort((a, b) {
+        if (a == 'Uncategorized') return 1;
+        if (b == 'Uncategorized') return -1;
+        return a.compareTo(b);
+      });
 
     return Scaffold(
       appBar: AppBar(title: const Text('Manage products')),
@@ -234,47 +318,185 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
             ),
           ),
 
-          // ── Active filter chip + result count ──────────────────────────
-          if (hasActiveFilter)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                defaultPadding,
-                0,
-                defaultPadding,
-                defaultPadding / 2,
-              ),
-              child: Row(
+          // ── Major Category horizontal chips ────────────────────────────
+          if (sortedMajorCategories.isNotEmpty)
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: defaultPadding),
                 children: [
-                  if (_stockFilterEnabled)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: InputChip(
-                        label: Text(
-                          _maxStockValue == 0
-                              ? 'Out of stock'
-                              : 'Stock ≤ $_maxStockValue',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        deleteIcon: const Icon(Icons.close, size: 16),
-                        onDeleted: () {
-                          setState(() {
-                            _stockFilterEnabled = false;
-                            _maxStockValue = 0;
-                          });
-                        },
-                        backgroundColor: primaryColor.withValues(alpha: 0.12),
-                        side: BorderSide.none,
-                      ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      '${filtered.length} of ${allProducts.length} products',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                  _CategoryChip(
+                    label: 'All',
+                    count: allProducts.length,
+                    selected: _selectedMajorCategory == 'all',
+                    onTap: () {
+                      setState(() {
+                        _selectedMajorCategory = 'all';
+                        _selectedSubCategory = null;
+                      });
+                    },
                   ),
+                  for (final major in sortedMajorCategories)
+                    _CategoryChip(
+                      label: major,
+                      count: majorCategoryCounts[major] ?? 0,
+                      selected: _selectedMajorCategory.toLowerCase() ==
+                          major.toLowerCase(),
+                      onTap: () {
+                        setState(() {
+                          if (_selectedMajorCategory.toLowerCase() ==
+                              major.toLowerCase()) {
+                            _selectedMajorCategory = 'all';
+                            _selectedSubCategory = null;
+                          } else {
+                            _selectedMajorCategory = major;
+                            _selectedSubCategory = null;
+                          }
+                        });
+                      },
+                    ),
                 ],
               ),
             ),
+
+          // ── Subcategory chips (when a major category is selected) ────────
+          if (sortedSubCategories.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 34,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: defaultPadding),
+                children: [
+                  _SubCategoryChip(
+                    label: 'All $_selectedMajorCategory',
+                    selected: _selectedSubCategory == null,
+                    onTap: () {
+                      setState(() {
+                        _selectedSubCategory = null;
+                      });
+                    },
+                  ),
+                  for (final sub in sortedSubCategories)
+                    _SubCategoryChip(
+                      label: sub,
+                      count: subCategoryCounts[sub],
+                      selected: _selectedSubCategory?.toLowerCase() ==
+                          sub.toLowerCase(),
+                      onTap: () {
+                        setState(() {
+                          if (_selectedSubCategory?.toLowerCase() ==
+                              sub.toLowerCase()) {
+                            _selectedSubCategory = null;
+                          } else {
+                            _selectedSubCategory = sub;
+                          }
+                        });
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+
+          // ── Active filter chips + Result count + Expand/Collapse all ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              defaultPadding,
+              6,
+              defaultPadding,
+              6,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        '${filtered.length} of ${allProducts.length} products',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      if (_stockFilterEnabled)
+                        InputChip(
+                          label: Text(
+                            _maxStockValue == 0
+                                ? 'Out of stock'
+                                : 'Stock ≤ $_maxStockValue',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          deleteIcon: const Icon(Icons.close, size: 16),
+                          onDeleted: () {
+                            setState(() {
+                              _stockFilterEnabled = false;
+                              _maxStockValue = 0;
+                            });
+                          },
+                          backgroundColor: primaryColor.withValues(alpha: 0.12),
+                          side: BorderSide.none,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      if (_selectedMajorCategory != 'all')
+                        InputChip(
+                          label: Text(
+                            _selectedSubCategory == null
+                                ? _selectedMajorCategory
+                                : '$_selectedMajorCategory > $_selectedSubCategory',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          deleteIcon: const Icon(Icons.close, size: 16),
+                          onDeleted: () {
+                            setState(() {
+                              _selectedMajorCategory = 'all';
+                              _selectedSubCategory = null;
+                            });
+                          },
+                          backgroundColor: primaryColor.withValues(alpha: 0.12),
+                          side: BorderSide.none,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
+                  ),
+                ),
+                if (sortedGroupKeys.length > 1)
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        if (_collapsedCategories.length ==
+                            sortedGroupKeys.length) {
+                          _collapsedCategories.clear();
+                        } else {
+                          _collapsedCategories.addAll(sortedGroupKeys);
+                        }
+                      });
+                    },
+                    icon: Icon(
+                      _collapsedCategories.length == sortedGroupKeys.length
+                          ? Icons.unfold_more
+                          : Icons.unfold_less,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _collapsedCategories.length == sortedGroupKeys.length
+                          ? 'Expand all'
+                          : 'Collapse all',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
 
           // ── List ───────────────────────────────────────────────────────
           Expanded(
@@ -319,6 +541,8 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                                     _searchQuery = '';
                                     _stockFilterEnabled = false;
                                     _maxStockValue = 0;
+                                    _selectedMajorCategory = 'all';
+                                    _selectedSubCategory = null;
                                   });
                                 },
                                 child: const Text('Clear filters'),
@@ -328,22 +552,36 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
                         ),
                       ],
                     )
-                  : ListView.separated(
+                  : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(
                         defaultPadding,
                         0,
                         defaultPadding,
-                        defaultPadding,
+                        defaultPadding * 2,
                       ),
-                      itemCount: filtered.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: defaultPadding),
-                      itemBuilder: (context, index) {
-                        final product = filtered[index];
-                        return _ProductCard(
-                          product: product,
-                          effectiveStock: _effectiveStock(product),
+                      itemCount: sortedGroupKeys.length,
+                      itemBuilder: (context, groupIndex) {
+                        final categoryTitle = sortedGroupKeys[groupIndex];
+                        final categoryProducts =
+                            categoryGroups[categoryTitle] ?? [];
+                        final isCollapsed =
+                            _collapsedCategories.contains(categoryTitle);
+
+                        return _CategorySection(
+                          categoryTitle: categoryTitle,
+                          products: categoryProducts,
+                          isCollapsed: isCollapsed,
+                          onToggleCollapse: () {
+                            setState(() {
+                              if (isCollapsed) {
+                                _collapsedCategories.remove(categoryTitle);
+                              } else {
+                                _collapsedCategories.add(categoryTitle);
+                              }
+                            });
+                          },
                           adminProvider: adminProvider,
+                          effectiveStock: _effectiveStock,
                         );
                       },
                     ),
@@ -357,6 +595,217 @@ class _AdminProductsScreenState extends State<AdminProductsScreen> {
         },
         label: const Text('Add product'),
         icon: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+/// Category chip for major category selection.
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        selected: selected,
+        onSelected: (_) => onTap(),
+        label: Text('$label ($count)'),
+        selectedColor: primaryColor,
+        checkmarkColor: Colors.white,
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : null,
+          fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+          fontSize: 13,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: selected ? primaryColor : Theme.of(context).dividerColor,
+          ),
+        ),
+        backgroundColor: Theme.of(context).cardColor,
+        showCheckmark: false,
+      ),
+    );
+  }
+}
+
+/// Subcategory chip.
+class _SubCategoryChip extends StatelessWidget {
+  const _SubCategoryChip({
+    required this.label,
+    this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int? count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = count != null ? '$label ($count)' : label;
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ChoiceChip(
+        selected: selected,
+        onSelected: (_) => onTap(),
+        label: Text(text),
+        selectedColor: primaryColor.withValues(alpha: 0.2),
+        labelStyle: TextStyle(
+          color: selected ? primaryColor : null,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 12,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: selected ? primaryColor : Theme.of(context).dividerColor,
+          ),
+        ),
+        backgroundColor: Theme.of(context).cardColor.withValues(alpha: 0.5),
+        visualDensity: VisualDensity.compact,
+        showCheckmark: false,
+      ),
+    );
+  }
+}
+
+/// A collapsible section for a category with its products.
+class _CategorySection extends StatelessWidget {
+  const _CategorySection({
+    required this.categoryTitle,
+    required this.products,
+    required this.isCollapsed,
+    required this.onToggleCollapse,
+    required this.adminProvider,
+    required this.effectiveStock,
+  });
+
+  final String categoryTitle;
+  final List<ProductModel> products;
+  final bool isCollapsed;
+  final VoidCallback onToggleCollapse;
+  final AdminProvider adminProvider;
+  final int Function(ProductModel) effectiveStock;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: defaultPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Category Header Card ─────────────────────────────
+          Material(
+            color: theme.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: onToggleCollapse,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: primaryColor.withValues(alpha: 0.3),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.category_rounded,
+                        size: 18,
+                        color: primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        categoryTitle,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${products.length}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      isCollapsed
+                          ? Icons.keyboard_arrow_down_rounded
+                          : Icons.keyboard_arrow_up_rounded,
+                      color: theme.iconTheme.color?.withValues(alpha: 0.7),
+                      size: 22,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── Products under this category ─────────────────────
+          if (!isCollapsed) ...[
+            const SizedBox(height: defaultPadding / 2),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: products.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: defaultPadding / 2),
+              itemBuilder: (context, index) {
+                final product = products[index];
+                return _ProductCard(
+                  product: product,
+                  effectiveStock: effectiveStock(product),
+                  adminProvider: adminProvider,
+                );
+              },
+            ),
+          ],
+        ],
       ),
     );
   }

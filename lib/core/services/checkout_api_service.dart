@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:shop/core/config/payment_config.dart';
@@ -165,54 +166,120 @@ class CheckoutApiService {
     Map<String, dynamic> payload, {
     Set<int> expectedStatusCodes = const {200},
   }) async {
-    try {
-      final response = await _client
-          .post(
-            uri,
-            headers: const <String, String>{'Content-Type': 'application/json'},
-            body: jsonEncode(payload),
-          )
-          .timeout(const Duration(seconds: 20));
+    const int maxAttempts = 2;
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        debugPrint('[checkout] POST $uri');
+        final response = await _client
+            .post(
+              uri,
+              headers: const <String, String>{
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 40));
 
-      final decoded = _decodeJsonObject(response.body);
-      if (!expectedStatusCodes.contains(response.statusCode)) {
+        final statusCode = response.statusCode;
+        final responseBody = response.body.trim();
+
+        if (statusCode == 404) {
+          throw CheckoutApiException(
+            message:
+                'Payment endpoint not found (404).\nTarget: $uri\nPlease check store settings or rebuild the app with the latest configuration.',
+            statusCode: statusCode,
+            responseBody: responseBody,
+            url: uri.toString(),
+          );
+        }
+
+        final isGatewayError =
+            statusCode == 502 || statusCode == 503 || statusCode == 504;
+        final isHtml = responseBody.startsWith('<') ||
+            responseBody.toLowerCase().contains('<!doctype html') ||
+            responseBody.toLowerCase().contains('<html');
+
+        if (isGatewayError || (isHtml && statusCode >= 500)) {
+          if (attempt < maxAttempts - 1) {
+            await Future<void>.delayed(const Duration(seconds: 3));
+            continue;
+          }
+          throw CheckoutApiException(
+            message:
+                'The payment server is currently waking up or temporarily unavailable. Please wait a few seconds and try again, or select Cash on Delivery.',
+            statusCode: statusCode,
+            responseBody: responseBody,
+            url: uri.toString(),
+          );
+        }
+
+        Map<String, dynamic> decoded;
+        try {
+          decoded = _decodeJsonObject(responseBody);
+        } on FormatException {
+          if (attempt < maxAttempts - 1 && statusCode >= 500) {
+            await Future<void>.delayed(const Duration(seconds: 3));
+            continue;
+          }
+          throw CheckoutApiException(
+            message: statusCode != 200
+                ? 'Payment server returned status $statusCode.'
+                : 'Payment server returned an unexpected response.',
+            statusCode: statusCode,
+            responseBody: responseBody,
+            url: uri.toString(),
+          );
+        }
+
+        if (!expectedStatusCodes.contains(statusCode)) {
+          throw CheckoutApiException(
+            message:
+                _extractMessage(decoded) ??
+                'Payment request failed with status $statusCode.',
+            statusCode: statusCode,
+            responseBody: response.body,
+            url: uri.toString(),
+          );
+        }
+
+        final success = decoded['success'];
+        if (success is bool && !success) {
+          throw CheckoutApiException(
+            message: _extractMessage(decoded) ?? 'Payment request failed.',
+            statusCode: statusCode,
+            responseBody: response.body,
+            url: uri.toString(),
+          );
+        }
+
+        return decoded;
+      } on SocketException {
+        if (attempt < maxAttempts - 1) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          continue;
+        }
         throw CheckoutApiException(
           message:
-              _extractMessage(decoded) ??
-              'Backend request failed with status ${response.statusCode}.',
-          statusCode: response.statusCode,
-          responseBody: response.body,
+              'Unable to reach the payment server. Check your connection and try again.',
           url: uri.toString(),
         );
-      }
-
-      final success = decoded['success'];
-      if (success is bool && !success) {
+      } on TimeoutException {
+        if (attempt < maxAttempts - 1) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          continue;
+        }
         throw CheckoutApiException(
-          message: _extractMessage(decoded) ?? 'Backend request failed.',
-          statusCode: response.statusCode,
-          responseBody: response.body,
+          message:
+              'The payment server took too long to respond (it may be waking up). Please try again in a few seconds or choose Cash on Delivery.',
           url: uri.toString(),
         );
       }
-
-      return decoded;
-    } on SocketException {
-      throw CheckoutApiException(
-        message: 'Unable to reach the backend service. Check your connection.',
-        url: uri.toString(),
-      );
-    } on TimeoutException {
-      throw CheckoutApiException(
-        message: 'The backend took too long to respond. Please try again.',
-        url: uri.toString(),
-      );
-    } on FormatException {
-      throw CheckoutApiException(
-        message: 'Backend returned an invalid JSON response.',
-        url: uri.toString(),
-      );
     }
+
+    throw CheckoutApiException(
+      message: 'Payment request failed after retry.',
+      url: uri.toString(),
+    );
   }
 
   Map<String, dynamic> _decodeJsonObject(String body) {

@@ -69,6 +69,34 @@
     ],
     "rewrites": [
       {
+        "source": "/create-order",
+        "function": {
+          "functionId": "createRazorpayOrder",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/verify-payment",
+        "function": {
+          "functionId": "verifyRazorpayPayment",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/createRazorpayOrder",
+        "function": {
+          "functionId": "createRazorpayOrder",
+          "region": "asia-south1"
+        }
+      },
+      {
+        "source": "/verifyRazorpayPayment",
+        "function": {
+          "functionId": "verifyRazorpayPayment",
+          "region": "asia-south1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

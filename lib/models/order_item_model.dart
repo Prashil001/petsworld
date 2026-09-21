@@ -77,6 +77,7 @@ class OrderItemModel {
       'name': productName,
       'unitPrice': productPrice,
       'originalUnitPrice': originalProductPrice,
+      'lineTotal': lineTotal,
     };
   }
 }

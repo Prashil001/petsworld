@@ -16,9 +16,20 @@ Future<bool> addProductToCartFromCard(
     return false;
   }
 
+  final defaultPack = product.defaultPackOption;
+  final availableStock = defaultPack?.stockQuantity ?? product.stockQuantity;
+  if (availableStock <= 0) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('This product is currently out of stock.'),
+      ),
+    );
+    return false;
+  }
+
   final success = await context.read<CartProvider>().addToCart(
     product,
-    selectedOption: product.defaultPackOption,
+    selectedOption: defaultPack,
   );
 
   if (!context.mounted) {

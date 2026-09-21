@@ -165,37 +165,27 @@ class FirestoreOrderRepository implements OrderRepository {
   }) async {
     _ensureReady();
 
-    await _db.runTransaction((transaction) async {
-      final docRef = _db.collection('orders').doc(orderId);
-      final snapshot = await transaction.get(docRef);
-      if (!snapshot.exists) {
-        throw StateError('Order not found.');
-      }
+    final docRef = _db.collection('orders').doc(orderId);
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) {
+      throw StateError('Order not found.');
+    }
 
-      final order = OrderModel.fromMap(snapshot.id, snapshot.data()!);
-      if (order.userId != userId) {
-        throw StateError('You can only cancel your own orders.');
-      }
-      if (!order.canUserCancel) {
-        throw StateError('This order can no longer be cancelled.');
-      }
+    final order = OrderModel.fromMap(snapshot.id, snapshot.data()!);
+    if (order.userId != userId) {
+      throw StateError('You can only cancel your own orders.');
+    }
+    if (!order.canUserCancel) {
+      throw StateError('This order can no longer be cancelled.');
+    }
 
-      final updates = <String, dynamic>{
-        'orderStatus': OrderStatus.cancelled.name,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
+    final updates = <String, dynamic>{
+      'orderStatus': OrderStatus.cancelled.name,
+      'status': OrderStatus.cancelled.name,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
 
-      // Restore reserved stock in the same transaction.
-      if (order.stockDecremented) {
-        await _restoreStockForItems(
-          transaction: transaction,
-          items: order.items,
-        );
-        updates['stockDecremented'] = false;
-      }
-
-      transaction.update(docRef, updates);
-    });
+    await docRef.update(updates);
   }
 
   /// Restores stock for each order item inside the given Firestore [transaction].

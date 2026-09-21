@@ -90,7 +90,16 @@ service cloud.firestore {
       allow read: if isAdmin() ||
         (isSignedIn() && resource.data.userId == request.auth.uid);
 
-      allow update, delete: if isAdmin();
+      allow delete: if isAdmin();
+
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orderStatus', 'status', 'updatedAt', 'cancellationReason', 'cancelledAt']) &&
+        (request.resource.data.orderStatus == 'cancelled' || request.resource.data.status == 'cancelled') &&
+        (resource.data.orderStatus in ['placed', 'confirmed'] || resource.data.status in ['placed', 'confirmed'])
+      );
     }
   }
 }

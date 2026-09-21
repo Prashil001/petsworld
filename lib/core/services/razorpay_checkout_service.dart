@@ -37,6 +37,10 @@ class RazorpayCheckoutService {
       _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternalWallet);
     }
 
+    final cleanPhone = userPhone.replaceAll(RegExp(r'[^0-9+]'), '').trim();
+    final cleanEmail = userEmail.trim();
+    final cleanName = userName.trim();
+
     final options = <String, dynamic>{
       'key': resolvedKeyId,
       'amount': amountInPaise,
@@ -45,9 +49,14 @@ class RazorpayCheckoutService {
       'name': merchantName,
       'description': description,
       'prefill': <String, dynamic>{
-        'contact': userPhone,
-        'email': userEmail,
-        'name': userName,
+        if (cleanPhone.isNotEmpty) 'contact': cleanPhone,
+        if (cleanEmail.isNotEmpty) 'email': cleanEmail,
+        if (cleanName.isNotEmpty) 'name': cleanName,
+      },
+      'readonly': <String, dynamic>{
+        if (cleanEmail.isNotEmpty) 'email': true,
+        if (cleanPhone.isNotEmpty) 'contact': true,
+        if (cleanName.isNotEmpty) 'name': true,
       },
       'retry': <String, dynamic>{'enabled': true, 'max_count': 1},
       'send_sms_hash': true,

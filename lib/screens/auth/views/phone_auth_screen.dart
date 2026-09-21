@@ -65,7 +65,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     if (onlyDigits.length == 10) {
       return '+91$onlyDigits';
     }
-    return value;
+    if (onlyDigits.length == 11 && onlyDigits.startsWith('0')) {
+      return '+91${onlyDigits.substring(1)}';
+    }
+    if (onlyDigits.length == 12 && onlyDigits.startsWith('91')) {
+      return '+$onlyDigits';
+    }
+    return onlyDigits.isNotEmpty ? '+$onlyDigits' : value;
   }
 
   @override
@@ -118,7 +124,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 validator: (value) {
                   final trimmed = value?.trim() ?? '';
                   if (trimmed.isEmpty) return 'Phone number is required';
-                  if (trimmed.length < 10) {
+                  final digits = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+                  if (digits.length < 10) {
                     return 'Enter a valid number (example: +919876543210)';
                   }
                   return null;
@@ -177,7 +184,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                           await Navigator.of(context).pushNamed(
                             otpScreenRoute,
                             arguments: {
+                              'phoneNumber': normalizedPhone,
                               'preferredName': _nameController.text.trim(),
+                              'isSignUp': widget.isSignUp,
                             },
                           );
                         },
@@ -224,188 +233,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 }
 
-class PhoneOtpScreen extends StatefulWidget {
-  const PhoneOtpScreen({super.key, this.preferredName});
-
-  final String? preferredName;
-
-  @override
-  State<PhoneOtpScreen> createState() => _PhoneOtpScreenState();
-}
-
-class _PhoneOtpScreenState extends State<PhoneOtpScreen> {
-  final GlobalKey<FormState> _otpFormKey = GlobalKey<FormState>();
-  final TextEditingController _otpController = TextEditingController();
-
-  @override
-  void dispose() {
-    _otpController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _syncAndOpenApp() async {
-    final auth = context.read<AuthProvider>();
-    final cartProvider = context.read<CartProvider>();
-    final productProvider = context.read<ProductProvider>();
-    final orderProvider = context.read<OrderProvider>();
-
-    final userId = auth.currentUser?.uid;
-    await cartProvider.syncForUser(userId);
-    await productProvider.syncUserData(userId);
-    await orderProvider.syncForUser(userId);
-
-    if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(entryPointScreenRoute, (route) => false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final pendingPhoneNumber = authProvider.pendingPhoneNumber;
-    final theme = Theme.of(context);
-
-    return AuthShell(
-      eyebrow: 'PHONE VERIFICATION',
-      title: 'Enter OTP',
-      subtitle: pendingPhoneNumber == null
-          ? 'Enter the one-time code sent to your mobile number.'
-          : 'Enter the one-time code sent to $pendingPhoneNumber.',
-      footer: Center(
-        child: TextButton.icon(
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back_rounded, size: 18),
-          label: const Text('Change phone number'),
-        ),
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _PhoneAuthInfoCard(
-              icon: Icons.mark_chat_read_outlined,
-              text: 'OTP sent. Enter the 6-digit code to finish signing in.',
-            ),
-            const SizedBox(height: defaultPadding),
-            Form(
-              key: _otpFormKey,
-              child: TextFormField(
-                controller: _otpController,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                validator: (value) {
-                  final code = value?.trim() ?? '';
-                  if (code.isEmpty) return 'OTP is required';
-                  if (code.length != 6) return 'Enter the 6-digit OTP';
-                  return null;
-                },
-                decoration: const InputDecoration(
-                  hintText: 'Enter 6-digit OTP',
-                  counterText: '',
-                ),
-              ),
-            ),
-            const SizedBox(height: defaultPadding / 2),
-            Row(
-              children: [
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E242B),
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: authProvider.isLoading
-                          ? null
-                          : () async {
-                              final auth = context.read<AuthProvider>();
-                              if (!_otpFormKey.currentState!.validate()) {
-                                return;
-                              }
-                              final success = await auth.verifyPhoneOtp(
-                                smsCode: _otpController.text,
-                                preferredName: widget.preferredName,
-                              );
-                              if (!context.mounted) return;
-                              if (!success) {
-                                final message =
-                                    auth.errorMessage ??
-                                    'Unable to verify OTP right now.';
-                                await showAuthErrorDialog(
-                                  context,
-                                  message: message,
-                                );
-                                auth.clearError();
-                                return;
-                              }
-                              await _syncAndOpenApp();
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                      ),
-                      child: Text(
-                        authProvider.isLoading
-                            ? 'Verifying...'
-                            : 'Verify & continue',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: null,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: defaultPadding / 2),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed:
-                        authProvider.isLoading || pendingPhoneNumber == null
-                        ? null
-                        : () async {
-                            final auth = context.read<AuthProvider>();
-                            final success = await auth.requestPhoneOtp(
-                              phoneNumber: pendingPhoneNumber,
-                              isResend: true,
-                            );
-                            if (!context.mounted || success) return;
-                            final message =
-                                auth.errorMessage ??
-                                'Unable to resend OTP right now.';
-                            await showAuthErrorDialog(
-                              context,
-                              message: message,
-                            );
-                            auth.clearError();
-                          },
-                    child: const Text('Resend OTP'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: defaultPadding),
-            Text(
-              'If the code does not arrive, wait a moment and try resending it.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.textTheme.bodySmall?.color?.withValues(
-                  alpha: 0.72,
-                ),
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _PhoneAuthInfoCard extends StatelessWidget {
   const _PhoneAuthInfoCard({required this.icon, required this.text});

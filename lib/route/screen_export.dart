@@ -1,6 +1,7 @@
 export '/screens/auth/views/login_screen.dart';
 export '/screens/auth/views/password_recovery_screen.dart';
 export '/screens/auth/views/phone_auth_screen.dart';
+export '/screens/auth/views/phone_otp_screen.dart';
 export '/screens/auth/views/signup_screen.dart';
 export '/screens/auth/views/privacy_policy_screen.dart';
 
