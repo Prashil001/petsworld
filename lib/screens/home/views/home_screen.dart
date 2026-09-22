@@ -51,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final id = c.id.toLowerCase().trim();
       return petTypeIds.contains(t) || petTypeIds.contains(id);
     }).toList();
-    final flashSaleProducts = productProvider.flashSaleProducts;
     final bestSellers = productProvider.popularProducts;
     final newArrivals = productProvider.newArrivals;
     final allProducts = productProvider.catalogProducts;
@@ -60,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final everythingEmpty =
         allCategories.isEmpty &&
-        flashSaleProducts.isEmpty &&
         bestSellers.isEmpty &&
         newArrivals.isEmpty &&
         allProducts.isEmpty &&
@@ -240,25 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       actionText: 'See all',
                       products: newArrivals,
-                      onTapAction: () => _openDiscover(context),
-                    ),
-                  ),
-
-                // ── Deals of the week ──────────────────────────────────────────
-                if (flashSaleProducts.isNotEmpty)
-                  SliverToBoxAdapter(
-                    child: _ProductRailSection(
-                      title: 'Deals of the week',
-                      leading: const Icon(
-                        Icons.local_fire_department_rounded,
-                        color: accentColor,
-                        size: 18,
-                      ),
-                      badge: 'HOT',
-                      badgeColor: dealBadgeBg,
-                      badgeTextColor: dealBadgeText,
-                      actionText: 'View deals',
-                      products: flashSaleProducts,
                       onTapAction: () => _openDiscover(context),
                     ),
                   ),
