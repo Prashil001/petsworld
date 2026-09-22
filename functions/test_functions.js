@@ -202,4 +202,52 @@ const orderMsg = _test.buildOrderMessage({
 assert(orderMsg.includes("Dog Food x3 - Rs 1500"), "Line total should be 3 x 500 = 1500");
 console.log("✓ buildOrderMessage accurately calculates and formats lineTotal in Telegram alert");
 
+// 9. shouldMarkCodOrderPaidOnDelivered tests
+assert.strictEqual(
+  _test.shouldMarkCodOrderPaidOnDelivered({
+    orderStatus: "delivered",
+    paymentMethod: "cod",
+    paymentStatus: "pending",
+  }),
+  true,
+  "Delivered COD order with pending status should be marked paid"
+);
+assert.strictEqual(
+  _test.shouldMarkCodOrderPaidOnDelivered({
+    orderStatus: "delivered",
+    payment: { paymentMethod: "cod", paymentStatus: "pending" },
+  }),
+  true,
+  "Delivered COD order with nested payment pending should be marked paid"
+);
+assert.strictEqual(
+  _test.shouldMarkCodOrderPaidOnDelivered({
+    orderStatus: "delivered",
+    paymentMethod: "cod",
+    paymentStatus: "paid",
+  }),
+  false,
+  "Already paid COD order should not be marked paid again"
+);
+assert.strictEqual(
+  _test.shouldMarkCodOrderPaidOnDelivered({
+    orderStatus: "shipped",
+    paymentMethod: "cod",
+    paymentStatus: "pending",
+  }),
+  false,
+  "Shipped COD order should remain pending"
+);
+assert.strictEqual(
+  _test.shouldMarkCodOrderPaidOnDelivered({
+    orderStatus: "delivered",
+    paymentMethod: "razorpay",
+    paymentStatus: "paid",
+  }),
+  false,
+  "Razorpay order should not be affected by COD rule"
+);
+console.log("✓ shouldMarkCodOrderPaidOnDelivered identifies delivered COD orders needing paid status");
+
 console.log("\nAll Firebase Functions unit tests passed successfully!");
+

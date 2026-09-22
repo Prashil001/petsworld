@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shop/models/cart_item_model.dart';
 import 'package:shop/models/cart_pricing_summary_model.dart';
+import 'package:shop/models/order_delivery_address_model.dart';
+import 'package:shop/models/order_model.dart';
+import 'package:shop/models/order_payment_model.dart';
+import 'package:shop/models/order_pricing_model.dart';
 import 'package:shop/models/product_model.dart';
 import 'package:shop/models/product_option_model.dart';
 
@@ -152,6 +156,88 @@ void main() {
       );
 
       expect(pricing.total, equals(0));
+    });
+  });
+
+  group('OrderModel Delivered COD Payment Tests', () {
+    const address = OrderDeliveryAddressModel(
+      fullName: 'Jane Doe',
+      phone: '9876543210',
+      addressLine1: '123 Main St',
+      city: 'Solapur',
+      state: 'Maharashtra',
+      pincode: '413001',
+    );
+
+    const pricing = OrderPricingModel(
+      subtotal: 500,
+      deliveryCharge: 0,
+      discount: 0,
+      totalAmount: 500,
+    );
+
+    test('COD order has pending payment when placed or confirmed', () {
+      const order = OrderModel(
+        orderId: 'ord_1',
+        userId: 'user_1',
+        userName: 'Jane',
+        userEmail: 'jane@example.com',
+        userPhone: '9876543210',
+        deliveryAddress: address,
+        items: [],
+        pricing: pricing,
+        payment: OrderPaymentModel(
+          paymentMethod: PaymentMethod.cod,
+          paymentStatus: PaymentStatus.pending,
+        ),
+        orderStatus: OrderStatus.confirmed,
+      );
+
+      expect(order.paymentStatus, equals(PaymentStatus.pending));
+    });
+
+    test('COD order automatically reports paid paymentStatus when delivered', () {
+      const order = OrderModel(
+        orderId: 'ord_2',
+        userId: 'user_1',
+        userName: 'Jane',
+        userEmail: 'jane@example.com',
+        userPhone: '9876543210',
+        deliveryAddress: address,
+        items: [],
+        pricing: pricing,
+        payment: OrderPaymentModel(
+          paymentMethod: PaymentMethod.cod,
+          paymentStatus: PaymentStatus.pending,
+        ),
+        orderStatus: OrderStatus.delivered,
+      );
+
+      expect(order.paymentStatus, equals(PaymentStatus.paid));
+    });
+
+    test('OrderModel.fromMap resolves delivered COD order payment as paid', () {
+      final order = OrderModel.fromMap('ord_3', {
+        'userId': 'user_1',
+        'customerName': 'Jane',
+        'orderStatus': 'delivered',
+        'payment': {
+          'paymentMethod': 'cod',
+          'paymentStatus': 'pending',
+        },
+        'deliveryAddress': {
+          'fullName': 'Jane Doe',
+          'phone': '9876543210',
+          'addressLine1': '123 Main St',
+          'city': 'Solapur',
+          'state': 'Maharashtra',
+          'pincode': '413001',
+        },
+        'items': [],
+      });
+
+      expect(order.paymentStatus, equals(PaymentStatus.paid));
+      expect(order.payment.paymentStatus, equals(PaymentStatus.paid));
     });
   });
 }

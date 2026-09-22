@@ -545,6 +545,42 @@ exports.restoreProductStockOnOrderCancelled = onDocumentUpdated(
   },
 );
 
+exports.markCodOrderPaidOnDelivered = onDocumentUpdated(
+  {
+    document: "orders/{orderId}",
+    region: "asia-south1",
+  },
+  async (event) => {
+    const afterOrder = event.data?.after?.data();
+    if (!afterOrder) return;
+
+    if (!shouldMarkCodOrderPaidOnDelivered(afterOrder)) {
+      return;
+    }
+
+    logger.info("Delivered COD order detected without paid status. Updating to paid...", {
+      orderId: event.params.orderId,
+    });
+
+    try {
+      await event.data.after.ref.update({
+        paymentStatus: "paid",
+        "payment.paymentStatus": "paid",
+        "payment.paidAt": admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      logger.info("Delivered COD order marked as paid successfully.", {
+        orderId: event.params.orderId,
+      });
+    } catch (err) {
+      logger.error("Failed to mark delivered COD order as paid in Firestore.", {
+        orderId: event.params.orderId,
+        error: err?.message || String(err),
+      });
+    }
+  },
+);
+
 async function decrementStockForOrder({ orderRef, order, orderId }) {
   const items = Array.isArray(order?.items) ? order.items : [];
   const itemsByProduct = groupOrderItemsByProduct(items);
@@ -666,6 +702,23 @@ function shouldDecrementStockForOrder(order) {
 
 function shouldNotifyAdminForOrder(order) {
   return shouldDecrementStockForOrder(order);
+}
+
+function shouldMarkCodOrderPaidOnDelivered(order) {
+  if (!order) return false;
+  const status = String(order.orderStatus || order.status || "").trim().toLowerCase();
+  const paymentMethod = String(
+    order.payment?.paymentMethod || order.paymentMethod || "",
+  ).trim().toLowerCase();
+  const paymentStatus = String(
+    order.payment?.paymentStatus || order.paymentStatus || "",
+  ).trim().toLowerCase();
+
+  return (
+    status === "delivered" &&
+    (paymentMethod === "cod" || !paymentMethod) &&
+    paymentStatus !== "paid"
+  );
 }
 
 function buildOrderMessage({
@@ -1172,5 +1225,6 @@ module.exports = {
     formatMoney,
     escapeHtml,
     sanitizeRazorpayNotes,
+    shouldMarkCodOrderPaidOnDelivered,
   },
 };

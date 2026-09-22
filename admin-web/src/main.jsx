@@ -534,7 +534,7 @@ function OrderDetailCard({ order, refresh, setToast }) {
         <button onClick={() => downloadInvoice(order, setToast)}><FileText size={16} /> Generate invoice</button>
         <label>
           <span>Order status</span>
-          <select value={status} disabled={locked} onChange={(e) => updateOrderStatus(order.id, e.target.value, refresh, setToast)}>
+          <select value={status} disabled={locked} onChange={(e) => updateOrderStatus(order.id, e.target.value, refresh, setToast, order)}>
             {['placed', 'confirmed', 'shipped', 'delivered', 'cancelled'].map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </label>
@@ -1165,8 +1165,15 @@ async function removeDoc(name, id, refresh, setToast) {
   refresh();
 }
 
-async function updateOrderStatus(id, status, refresh, setToast) {
-  await updateDoc(doc(db, 'orders', id), { orderStatus: status, status, updatedAt: serverTimestamp() });
+async function updateOrderStatus(id, status, refresh, setToast, order) {
+  const updates = { orderStatus: status, status, updatedAt: serverTimestamp() };
+  const method = String(order?.payment?.paymentMethod || order?.paymentMethod || 'cod').toLowerCase();
+  if (status === 'delivered' && (method === 'cod' || !method)) {
+    updates.paymentStatus = 'paid';
+    updates['payment.paymentStatus'] = 'paid';
+    updates['payment.paidAt'] = serverTimestamp();
+  }
+  await updateDoc(doc(db, 'orders', id), updates);
   setToast('Order status updated.');
   refresh();
 }

@@ -141,8 +141,17 @@ class FirestoreOrderRepository implements OrderRepository {
 
       final updates = <String, dynamic>{
         'orderStatus': status.name,
+        'status': status.name,
         'updatedAt': FieldValue.serverTimestamp(),
       };
+
+      // When COD order is marked delivered, mark payment as paid
+      if (status == OrderStatus.delivered &&
+          current.paymentMethod == PaymentMethod.cod) {
+        updates['paymentStatus'] = PaymentStatus.paid.name;
+        updates['payment.paymentStatus'] = PaymentStatus.paid.name;
+        updates['payment.paidAt'] = FieldValue.serverTimestamp();
+      }
 
       // If admin moves the order to cancelled, restore the reserved stock
       // in the same transaction so other shoppers can buy those units.

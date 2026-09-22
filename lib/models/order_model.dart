@@ -54,7 +54,12 @@ class OrderModel {
   double get total => pricing.totalAmount;
   double get totalPrice => pricing.totalAmount;
   PaymentMethod get paymentMethod => payment.paymentMethod;
-  PaymentStatus get paymentStatus => payment.paymentStatus;
+  PaymentStatus get paymentStatus {
+    if (isDelivered && paymentMethod == PaymentMethod.cod) {
+      return PaymentStatus.paid;
+    }
+    return payment.paymentStatus;
+  }
   bool get isDelivered => orderStatus == OrderStatus.delivered;
   bool get isCancelled => orderStatus == OrderStatus.cancelled;
   bool get isShipped => orderStatus == OrderStatus.shipped;
@@ -139,17 +144,36 @@ class OrderModel {
                   (data['total'] as num?)?.toDouble() ??
                   0,
             ),
-      payment: paymentData is Map
-          ? OrderPaymentModel.fromMap(Map<String, dynamic>.from(paymentData))
-          : OrderPaymentModel(
-              paymentMethod: _paymentMethodFromString(
-                data['paymentMethod'] as String?,
-              ),
-              paymentStatus: _paymentStatusFromString(
-                data['paymentStatus'] as String?,
-              ),
-            ),
-      orderStatus: _orderStatusFromString(data['orderStatus'] as String?),
+      payment: () {
+        final resolvedStatus = _orderStatusFromString(
+          data['orderStatus'] as String? ?? data['status'] as String?,
+        );
+        final parsedPayment = paymentData is Map
+            ? OrderPaymentModel.fromMap(Map<String, dynamic>.from(paymentData))
+            : OrderPaymentModel(
+                paymentMethod: _paymentMethodFromString(
+                  data['paymentMethod'] as String?,
+                ),
+                paymentStatus: _paymentStatusFromString(
+                  data['paymentStatus'] as String?,
+                ),
+              );
+        if (resolvedStatus == OrderStatus.delivered &&
+            parsedPayment.paymentMethod == PaymentMethod.cod &&
+            parsedPayment.paymentStatus == PaymentStatus.pending) {
+          return OrderPaymentModel(
+            paymentMethod: parsedPayment.paymentMethod,
+            paymentStatus: PaymentStatus.paid,
+            razorpayPaymentId: parsedPayment.razorpayPaymentId,
+            razorpayOrderId: parsedPayment.razorpayOrderId,
+            razorpaySignature: parsedPayment.razorpaySignature,
+          );
+        }
+        return parsedPayment;
+      }(),
+      orderStatus: _orderStatusFromString(
+        data['orderStatus'] as String? ?? data['status'] as String?,
+      ),
       stockDecremented: data['stockDecremented'] as bool? ?? false,
       createdAt: _parseDate(data['createdAt']),
       updatedAt: _parseDate(data['updatedAt']),
