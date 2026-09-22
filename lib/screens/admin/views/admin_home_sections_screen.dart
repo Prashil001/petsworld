@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shop/constants.dart';
 import 'package:shop/models/coupon_model.dart';
 import 'package:shop/models/home_section_model.dart';
+import 'package:shop/models/product_model.dart';
 import 'package:shop/providers/admin_provider.dart';
 import 'package:shop/providers/product_provider.dart';
 
@@ -172,7 +173,10 @@ class _HomeSectionEditorSheetState extends State<_HomeSectionEditorSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _sortOrderController;
   late final TextEditingController _discountValueController;
+  final TextEditingController _searchController = TextEditingController();
   final Set<String> _selectedProductIds = <String>{};
+  String _searchQuery = '';
+  String _selectedCategory = 'all';
   bool _isActive = true;
   bool _hasDiscount = false;
   CouponDiscountType _discountType = CouponDiscountType.percentage;
@@ -204,6 +208,7 @@ class _HomeSectionEditorSheetState extends State<_HomeSectionEditorSheet> {
     _titleController.dispose();
     _sortOrderController.dispose();
     _discountValueController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -212,169 +217,387 @@ class _HomeSectionEditorSheetState extends State<_HomeSectionEditorSheet> {
     final adminProvider = context.watch<AdminProvider>();
     final products = adminProvider.products;
 
+    // Collect and sort unique categories
+    final categoryCounts = <String, int>{};
+    for (final p in products) {
+      final cat = p.categoryName.trim().isEmpty ? 'Uncategorized' : p.categoryName.trim();
+      categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+    }
+    final sortedCategories = categoryCounts.keys.toList()..sort();
+
+    // Filter products by category and search query
+    final filteredProducts = products.where((product) {
+      // 1. Category filter
+      if (_selectedCategory == 'selected') {
+        if (!_selectedProductIds.contains(product.id)) return false;
+      } else if (_selectedCategory != 'all') {
+        final cat = product.categoryName.trim().isEmpty ? 'Uncategorized' : product.categoryName.trim();
+        if (cat.toLowerCase() != _selectedCategory.toLowerCase()) {
+          return false;
+        }
+      }
+
+      // 2. Search query filter
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final matchesName = product.title.toLowerCase().contains(q);
+        final matchesCat = product.categoryName.toLowerCase().contains(q);
+        final matchesBrand = product.brandName.toLowerCase().contains(q);
+        if (!matchesName && !matchesCat && !matchesBrand) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.90,
+        ),
         decoration: BoxDecoration(
           color: Theme.of(context).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         ),
         child: SafeArea(
           top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 52,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).dividerColor,
-                        borderRadius: const BorderRadius.all(
-                          Radius.circular(999),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Header with Drag Handle & Close Button ─────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
+                child: Column(
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 52,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).dividerColor,
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(999),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    widget.initialSection == null
-                        ? 'Create home section'
-                        : 'Edit home section',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          widget.initialSection == null
+                              ? 'Create home section'
+                              : 'Edit home section',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _titleController,
-                    validator: (value) => (value ?? '').trim().isEmpty
-                        ? 'Title is required'
-                        : null,
-                    decoration: const InputDecoration(
-                      labelText: 'Section title',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _sortOrderController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Display order',
-                    ),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Show this section'),
-                    value: _isActive,
-                    onChanged: (value) => setState(() => _isActive = value),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      _startDate == null
-                          ? 'Start date (optional)'
-                          : 'Starts ${_formatDate(_startDate!)}',
-                    ),
-                    trailing: TextButton(
-                      onPressed: () => _pickDate(isStart: true),
-                      child: const Text('Select'),
-                    ),
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      _endDate == null
-                          ? 'End date (optional)'
-                          : 'Ends ${_formatDate(_endDate!)}',
-                    ),
-                    trailing: TextButton(
-                      onPressed: () => _pickDate(isStart: false),
-                      child: const Text('Select'),
-                    ),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Apply a section discount'),
-                    value: _hasDiscount,
-                    onChanged: (value) => setState(() => _hasDiscount = value),
-                  ),
-                  if (_hasDiscount) ...[
-                    DropdownButtonFormField<CouponDiscountType>(
-                      initialValue: _discountType,
-                      decoration: const InputDecoration(
-                        labelText: 'Section discount type',
-                      ),
-                      items: CouponDiscountType.values
-                          .map(
-                            (item) => DropdownMenuItem<CouponDiscountType>(
-                              value: item,
-                              child: Text(
-                                item == CouponDiscountType.flatAmount
-                                    ? 'Flat amount off'
-                                    : 'Percentage off',
+                  ],
+                ),
+              ),
+
+              // ── Scrollable Form Body ──────────────────────────────
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          controller: _titleController,
+                          validator: (value) => (value ?? '').trim().isEmpty
+                              ? 'Title is required'
+                              : null,
+                          decoration: const InputDecoration(
+                            labelText: 'Section title',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _sortOrderController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Display order',
+                          ),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Show this section'),
+                          value: _isActive,
+                          onChanged: (value) => setState(() => _isActive = value),
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            _startDate == null
+                                ? 'Start date (optional)'
+                                : 'Starts ${_formatDate(_startDate!)}',
+                          ),
+                          trailing: TextButton(
+                            onPressed: () => _pickDate(isStart: true),
+                            child: const Text('Select'),
+                          ),
+                        ),
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            _endDate == null
+                                ? 'End date (optional)'
+                                : 'Ends ${_formatDate(_endDate!)}',
+                          ),
+                          trailing: TextButton(
+                            onPressed: () => _pickDate(isStart: false),
+                            child: const Text('Select'),
+                          ),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Apply a section discount'),
+                          value: _hasDiscount,
+                          onChanged: (value) => setState(() => _hasDiscount = value),
+                        ),
+                        if (_hasDiscount) ...[
+                          DropdownButtonFormField<CouponDiscountType>(
+                            initialValue: _discountType,
+                            decoration: const InputDecoration(
+                              labelText: 'Section discount type',
+                            ),
+                            items: CouponDiscountType.values
+                                .map(
+                                  (item) => DropdownMenuItem<CouponDiscountType>(
+                                    value: item,
+                                    child: Text(
+                                      item == CouponDiscountType.flatAmount
+                                          ? 'Flat amount off'
+                                          : 'Percentage off',
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() => _discountType = value);
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _discountValueController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Section discount value',
+                            ),
+                          ),
+                        ],
+                        const Divider(height: 32),
+
+                        // ── Curated Products Header & Actions ─────────
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Curated products (${_selectedProductIds.length} selected)',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (_selectedProductIds.isNotEmpty)
+                              TextButton(
+                                onPressed: () {
+                                  setState(() => _selectedProductIds.clear());
+                                },
+                                child: const Text('Clear all'),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+
+                        // ── Search Bar ──────────────────────────────
+                        TextField(
+                          controller: _searchController,
+                          onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                          decoration: InputDecoration(
+                            hintText: 'Search by name, brand, or category...',
+                            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+
+                        // ── Category Filter Chips ─────────────────────
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              ChoiceChip(
+                                label: Text('All (${products.length})'),
+                                selected: _selectedCategory == 'all',
+                                onSelected: (_) =>
+                                    setState(() => _selectedCategory = 'all'),
+                              ),
+                              const SizedBox(width: 8),
+                              ChoiceChip(
+                                avatar: const Icon(Icons.check_circle_outline, size: 16),
+                                label: Text('Selected (${_selectedProductIds.length})'),
+                                selected: _selectedCategory == 'selected',
+                                onSelected: (_) =>
+                                    setState(() => _selectedCategory = 'selected'),
+                              ),
+                              for (final cat in sortedCategories) ...[
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  label: Text('$cat (${categoryCounts[cat]})'),
+                                  selected: _selectedCategory == cat,
+                                  onSelected: (_) =>
+                                      setState(() => _selectedCategory = cat),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // ── Filtered Products List ───────────────────
+                        if (filteredProducts.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.search_off_rounded,
+                                    size: 40,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _selectedCategory == 'selected'
+                                        ? 'No products selected yet.'
+                                        : 'No products match your search or filter.',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _discountType = value);
-                      },
+                        else
+                          ...filteredProducts.map(
+                            (product) {
+                              final isSelected = _selectedProductIds.contains(product.id);
+                              return CheckboxListTile(
+                                contentPadding: EdgeInsets.zero,
+                                value: isSelected,
+                                secondary: product.imageUrl.isNotEmpty
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(
+                                          product.imageUrl,
+                                          width: 42,
+                                          height: 42,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => Container(
+                                            width: 42,
+                                            height: 42,
+                                            color: Colors.grey.withValues(alpha: 0.1),
+                                            child: const Icon(
+                                              Icons.inventory_2_outlined,
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : null,
+                                onChanged: (_) {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedProductIds.remove(product.id);
+                                    } else {
+                                      _selectedProductIds.add(product.id);
+                                    }
+                                  });
+                                },
+                                title: Text(
+                                  product.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  '${product.categoryName}${product.brandName.isNotEmpty ? " · ${product.brandName}" : ""} · Rs ${product.price.toStringAsFixed(0)}',
+                                ),
+                              );
+                            },
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _discountValueController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Section discount value',
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  Text(
-                    'Curated products',
-                    style: Theme.of(context).textTheme.titleSmall,
                   ),
-                  const SizedBox(height: 8),
-                  ...products.map(
-                    (product) => CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _selectedProductIds.contains(product.id),
-                      onChanged: (_) {
-                        setState(() {
-                          if (_selectedProductIds.contains(product.id)) {
-                            _selectedProductIds.remove(product.id);
-                          } else {
-                            _selectedProductIds.add(product.id);
-                          }
-                        });
-                      },
-                      title: Text(product.title),
-                      subtitle: Text(product.categoryName),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: adminProvider.isSaving ? null : _save,
-                      child: Text(
-                        adminProvider.isSaving ? 'Saving...' : 'Save section',
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+
+              // ── Sticky Save Button at Bottom ───────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  border: Border(
+                    top: BorderSide(color: Theme.of(context).dividerColor),
+                  ),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: adminProvider.isSaving ? null : _save,
+                    icon: adminProvider.isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    label: Text(
+                      adminProvider.isSaving
+                          ? 'Saving...'
+                          : 'Save section (${_selectedProductIds.length} selected)',
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
