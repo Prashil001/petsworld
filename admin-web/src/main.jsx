@@ -846,8 +846,198 @@ function StoreSettings({ data, refresh, setToast }) {
   );
 }
 
+function ProductPicker({ products, selectedIdsString, onChange }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+
+  const selectedIds = useMemo(() => {
+    return new Set(csv(selectedIdsString));
+  }, [selectedIdsString]);
+
+  const categories = useMemo(() => {
+    const counts = new Map();
+    products.forEach((p) => {
+      const cat = p.category || 'Uncategorized';
+      counts.set(cat, (counts.get(cat) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return products.filter((p) => {
+      const isSelected = selectedIds.has(p.id);
+      if (selectedCategory === 'selected' && !isSelected) return false;
+      if (selectedCategory !== 'all' && selectedCategory !== 'selected') {
+        const cat = p.category || 'Uncategorized';
+        if (cat !== selectedCategory) return false;
+      }
+      if (!q) return true;
+      const name = (p.name || '').toLowerCase();
+      const brand = (p.brandName || '').toLowerCase();
+      const cat = (p.category || '').toLowerCase();
+      const id = (p.id || '').toLowerCase();
+      return name.includes(q) || brand.includes(q) || cat.includes(q) || id.includes(q);
+    });
+  }, [products, searchQuery, selectedCategory, selectedIds]);
+
+  function toggleProduct(id) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    onChange(Array.from(next).join(', '));
+  }
+
+  function selectAllFiltered() {
+    const next = new Set(selectedIds);
+    filteredProducts.forEach((p) => next.add(p.id));
+    onChange(Array.from(next).join(', '));
+  }
+
+  function deselectAllFiltered() {
+    const next = new Set(selectedIds);
+    filteredProducts.forEach((p) => next.delete(p.id));
+    onChange(Array.from(next).join(', '));
+  }
+
+  function clearAll() {
+    onChange('');
+  }
+
+  return (
+    <div className="product-picker wide">
+      <div className="product-picker-top">
+        <div className="product-picker-title">
+          <h4>Select Products</h4>
+          <span className="picker-count-badge">
+            {selectedIds.size} selected
+          </span>
+        </div>
+        <div className="product-picker-actions">
+          {filteredProducts.length > 0 && (
+            <>
+              <button type="button" className="ghost-btn small" onClick={selectAllFiltered}>
+                Select visible ({filteredProducts.length})
+              </button>
+              <button type="button" className="ghost-btn small" onClick={deselectAllFiltered}>
+                Deselect visible
+              </button>
+            </>
+          )}
+          {selectedIds.size > 0 && (
+            <button type="button" className="ghost-btn small danger" onClick={clearAll}>
+              Clear all
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="product-picker-filters">
+        <div className="picker-search-wrap">
+          <Search size={16} className="picker-search-icon" />
+          <input
+            type="text"
+            placeholder="Search products by name, brand, category, or ID..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="picker-search-input"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="picker-clear-search"
+              onClick={() => setSearchQuery('')}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <div className="picker-category-chips">
+          <button
+            type="button"
+            className={`picker-chip ${selectedCategory === 'all' ? 'active' : ''}`}
+            onClick={() => setSelectedCategory('all')}
+          >
+            All ({products.length})
+          </button>
+          <button
+            type="button"
+            className={`picker-chip ${selectedCategory === 'selected' ? 'active' : ''}`}
+            onClick={() => setSelectedCategory('selected')}
+          >
+            Selected ({selectedIds.size})
+          </button>
+          {categories.map(([cat, count]) => (
+            <button
+              key={cat}
+              type="button"
+              className={`picker-chip ${selectedCategory === cat ? 'active' : ''}`}
+              onClick={() => setSelectedCategory(cat)}
+            >
+              {cat} ({count})
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="product-picker-list">
+        {filteredProducts.length === 0 ? (
+          <div className="picker-empty">
+            <Package size={32} />
+            <p>No products match your filter.</p>
+          </div>
+        ) : (
+          filteredProducts.map((p) => {
+            const isSelected = selectedIds.has(p.id);
+            const image = p.imageUrl || (p.imageUrls && p.imageUrls[0]) || '';
+            const price = p.salePrice || p.price;
+            return (
+              <div
+                key={p.id}
+                className={`picker-item ${isSelected ? 'selected' : ''}`}
+                onClick={() => toggleProduct(p.id)}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => {}}
+                  onClick={(e) => e.stopPropagation()}
+                  className="picker-checkbox"
+                />
+                <div className="picker-thumb">
+                  {image ? (
+                    <img src={image} alt="" />
+                  ) : (
+                    <div className="picker-thumb-placeholder">
+                      <Image size={18} />
+                    </div>
+                  )}
+                </div>
+                <div className="picker-item-info">
+                  <div className="picker-item-name">{p.name || 'Unnamed Product'}</div>
+                  <div className="picker-item-meta">
+                    {p.brandName && <span className="picker-brand">{p.brandName}</span>}
+                    {p.category && <span className="picker-cat-badge">{p.category}</span>}
+                    <span className="picker-price">{money(price)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 function HomeSections({ data, refresh, setToast }) {
   const [form, setForm] = useState(initialForms.section);
+  const selectedCount = csv(form.productIds).length;
+
   return (
     <CrudPage title="Home sections" subtitle="Curate homepage product rails, section discounts, and display windows.">
       <EditorPanel title={form.id ? 'Edit section' : 'Add section'} onReset={() => setForm(initialForms.section)} onSave={() => saveSection(form, refresh, setToast, setForm)}>
@@ -858,9 +1048,24 @@ function HomeSections({ data, refresh, setToast }) {
           <TextInput label="End date" type="date" value={form.endDate} onChange={(endDate) => setForm({ ...form, endDate })} />
           <SelectInput label="Discount type" value={form.sectionDiscountType} onChange={(sectionDiscountType) => setForm({ ...form, sectionDiscountType })} options={['', 'flatAmount', 'percentage']} />
           <TextInput label="Discount value" type="number" value={form.sectionDiscountValue} onChange={(sectionDiscountValue) => setForm({ ...form, sectionDiscountValue })} />
-          <TextInput label="Product IDs" value={form.productIds} onChange={(productIds) => setForm({ ...form, productIds })} wide />
           <Toggle label="Active" checked={form.isActive} onChange={(isActive) => setForm({ ...form, isActive })} />
+          <ProductPicker
+            products={data.products}
+            selectedIdsString={form.productIds}
+            onChange={(productIds) => setForm((prev) => ({ ...prev, productIds }))}
+          />
         </FormGrid>
+        <div className="sticky-editor-footer">
+          <div className="sticky-footer-info">
+            <span>{selectedCount} {selectedCount === 1 ? 'product' : 'products'} selected for this section</span>
+          </div>
+          <div className="sticky-footer-actions">
+            <button type="button" className="ghost-btn" onClick={() => setForm(initialForms.section)}>Reset</button>
+            <button type="button" className="primary-btn" onClick={() => saveSection(form, refresh, setToast, setForm)}>
+              <Save size={16} /> Save section ({selectedCount})
+            </button>
+          </div>
+        </div>
       </EditorPanel>
       <DataTable rows={data.sections} columns={[
         ['Title', (s) => <b>{s.title}</b>],
